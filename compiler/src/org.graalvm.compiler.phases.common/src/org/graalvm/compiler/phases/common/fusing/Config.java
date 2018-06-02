@@ -22,11 +22,11 @@ final class Config {
             String[] mapping = entry.split(":");
             if (mapping.length == 2) {
                 try {
-                    Class<?> targetClass = Class.forName(mapping[0]);
-                    Class<?> fusingClass = Class.forName(mapping[1]);
+                    Class<?> targetClass = ClassLoader.getSystemClassLoader().loadClass(mapping[0]);
+                    Class<?> fusingClass = ClassLoader.getSystemClassLoader().loadClass(mapping[1]);
                     configs.put(targetClass, fusingClass);
                 } catch (Exception e) {
-                    // TODO log
+                    e.printStackTrace(); // TODO logging
                 }
             }
             // else TODO log invalid config
@@ -40,27 +40,36 @@ final class Config {
             Map<Method, Method> methods = new HashMap<>();
             for (Method m : target.getMethods()) {
                 try {
-                    Method f = fusing.getMethod(m.getName(), m.getParameterTypes());
-                    methods.put(m, f);
+                    if (m.getDeclaringClass() != Object.class) {
+                        Method f = fusing.getMethod(m.getName(), m.getParameterTypes());
+                        methods.put(m, f);
+                    }
                 } catch (NoSuchMethodException | SecurityException e) {
-                    // TODO logging
+                    e.printStackTrace(); // TODO logging
                 }
             }
-            entries.add(new Entry(target, fusing, methods));
+            try {
+                Method fusingMethod = fusing.getMethod("fuse");
+                entries.add(new Entry(target, fusing, methods, fusingMethod));
+            } catch (NoSuchMethodException | SecurityException e) {
+                e.printStackTrace(); // TODO logging
+            }
         });
         return entries;
     }
 
     public static class Entry {
-        final Class<?> targetClass;
-        final Class<?> fusingClass;
-        final Map<Method, Method> methods;
+        private final Class<?> targetClass;
+        private final Class<?> fusingClass;
+        private final Map<Method, Method> methods;
+        private final Method fuseMethod;
 
-        public Entry(Class<?> targetClass, Class<?> fusingClass, Map<Method, Method> methods) {
+        public Entry(Class<?> targetClass, Class<?> fusingClass, Map<Method, Method> methods, Method fuseMethod) {
             super();
             this.targetClass = targetClass;
             this.fusingClass = fusingClass;
             this.methods = methods;
+            this.fuseMethod = fuseMethod;
         }
 
         public Class<?> getTargetClass() {
@@ -73,6 +82,10 @@ final class Config {
 
         public Map<Method, Method> getMethods() {
             return Collections.unmodifiableMap(methods);
+        }
+
+        public Method getFuseMethod() {
+            return fuseMethod;
         }
     }
 

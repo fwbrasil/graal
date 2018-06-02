@@ -6,18 +6,14 @@ import java.util.Map;
 import java.util.Set;
 
 import org.graalvm.compiler.graph.Node;
-import org.graalvm.compiler.nodes.CallTargetNode;
 import org.graalvm.compiler.nodes.InvokeNode;
 import org.graalvm.compiler.nodes.StructuredGraph;
-import org.graalvm.compiler.nodes.ValueNode;
-import org.graalvm.compiler.nodes.java.MethodCallTargetNode;
 import org.graalvm.compiler.phases.BasePhase;
 import org.graalvm.compiler.phases.common.fusing.Config.Entry;
 import org.graalvm.compiler.phases.common.inlining.InliningPhase;
 import org.graalvm.compiler.phases.tiers.HighTierContext;
 import org.graalvm.compiler.phases.tiers.PhaseContext;
 
-import jdk.vm.ci.code.BytecodeFrame;
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 public class FusingPhase extends BasePhase<HighTierContext> {
@@ -37,22 +33,33 @@ public class FusingPhase extends BasePhase<HighTierContext> {
             Set<InvokeNode> visited = new HashSet<>();
             fusingMap.forEach((invoke, fusingMethod) -> {
                 if (!visited.contains(invoke)) {
-                    if (!fusingMap.containsKey(invoke.predecessor()) & !fusingMap.containsKey(invoke.next()))
-                        visited.add(invoke);
-                    else {
-                        // Merge predecessors
+                    visited.add(invoke);
+                    if (fusingMap.containsKey(invoke.predecessor()) || fusingMap.containsKey(invoke.next())) {
+
                         Node curr = invoke;
-                        while (fusingMap.containsKey(curr)) {
-                            InvokeNode original = (InvokeNode) curr;
-                            CallTargetNode target = new MethodCallTargetNode(original.getInvokeKind(), fusingMap.get(original), original.callTarget().arguments().toArray(new ValueNode[0]),
-                                            original.callTarget().returnStamp(),
-                                            ((MethodCallTargetNode) original.callTarget()).getProfile());
-                            InvokeNode fusingInvoke = new InvokeNode(target, BytecodeFrame.UNKNOWN_BCI);
-                            graph.replaceFixed(original, fusingInvoke);
+                        while (fusingMap.containsKey(curr.predecessor()))
                             curr = curr.predecessor();
+
+                        // Add Fusing.stage
+
+                        while (fusingMap.containsKey(curr)) {
+                            InvokeNode i = (InvokeNode) curr;
+                            i.callTarget().setTargetMethod(fusingMap.get(curr));
+                            curr = i.next();
                         }
-                        // Add fusing class creation
-// curr.replaceAtPredecessor(other);
+
+                        ResolvedJavaMethod fuseMethod = context.getMetaAccess().lookupJavaMethod(entry.getFuseMethod());
+
+// GraphKit kit = new GraphKit(debug, thisMethod, providers, wordTypes,
+// providers.getGraphBuilderPlugins(), compilationId, toString());
+
+// CallTargetNode target = new MethodCallTargetNode(curr.getInvokeKind(), fusingMap.get(curr),
+// curr.callTarget().arguments().toArray(new ValueNode[0]),
+// curr.callTarget().returnStamp(),
+// ((MethodCallTargetNode) curr.callTarget()).getProfile());
+// InvokeNode fusingInvoke = new InvokeNode(target, BytecodeFrame.UNKNOWN_BCI);
+
+                        // Add fusing.apply
                     }
                 }
             });
@@ -66,7 +73,9 @@ public class FusingPhase extends BasePhase<HighTierContext> {
             Config.instance.getEntries().forEach(e -> {
                 e.getMethods().forEach((target, fusing) -> {
                     if (i.callTarget().targetMethod().equals(context.getMetaAccess().lookupJavaMethod(target))) {
-                        toFuse.putIfAbsent(e, new HashMap<>()).put(i, context.getMetaAccess().lookupJavaMethod(fusing));
+                        ResolvedJavaMethod method = context.getMetaAccess().lookupJavaMethod(fusing);
+                        toFuse.putIfAbsent(e, new HashMap<>());
+                        toFuse.get(e).put(i, method);
                         i.setUseForInlining(false);
                     }
                 });
@@ -74,38 +83,4 @@ public class FusingPhase extends BasePhase<HighTierContext> {
         });
         return toFuse;
     }
-
-// private static boolean shouldOptimize(InvokeNode node) {
-// String name = node.getTargetMethod().getDeclaringClass().getName();
-// return node.getTargetMethod().getName().equals("map") &&
-// name.startsWith("Lorg/graalvm/compiler/phases/common/fusing/List");
-// }
-//
-// private static Optional<InvokeNode> toFuse(Node node) {
-// if (node instanceof InvokeNode && shouldOptimize((InvokeNode) node))
-// return Optional.of((InvokeNode) node);
-// else
-// return Optional.empty();
-// }
-//
-// @Override
-// protected void run(StructuredGraph graph) {
-// Set<InvokeNode> roots = new HashSet<>();
-// graph.getNodes().filter(InvokeNode.class).forEach(n -> {
-// if (shouldOptimize(n)) {
-// toFuse(n.predecessor()).ifPresent(p -> {
-// roots.remove(n);
-// roots.add(p);
-// });
-// }
-// });
-// for (InvokeNode n : roots) {
-// MethodCallTargetNode original = (MethodCallTargetNode) n.callTarget();
-//// ListFusing.class.get
-//// CallTargetNode target = new MethodCallTargetNode(n.getInvokeKind(), method, new ValueNode[0],
-//// original.returnStamp() ,original.getProfile())
-// InvokeNode stage = new InvokeNode(null, BytecodeFrame.UNKNOWN_BCI);
-// n.replaceAtPredecessor(stage);
-// }
-// }
 }

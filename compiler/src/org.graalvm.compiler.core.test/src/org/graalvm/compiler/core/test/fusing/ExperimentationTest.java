@@ -50,77 +50,6 @@ import org.junit.Test;
 
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 
-@Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.TYPE)
-@interface Optimize {
-    public Class<?> value();
-}
-
-class List<T> {
-    T[] values;
-
-    public List(T... values) {
-        this.values = values;
-    }
-
-    public int size() {
-        return values.length;
-    }
-
-    public <U> List<U> map(Function<T, U> f) {
-        U[] n = (U[]) new Object[values.length];
-        for (int i = 0; i < values.length; i++)
-            n[i] = f.apply(values[i]);
-        return new List(n);
-    }
-}
-
-class ListFusing {
-    public static <T> ListStage<T, T> stage() {
-        return new ListStage.Id();
-    }
-}
-
-interface Stage<T, U> {
-
-    U apply(T v);
-}
-
-abstract class ListStage<T, U> implements Stage<List<T>, List<U>> {
-
-    public <V> ListStage<T, V> map(Function<U, V> f) {
-        return new Map(this, f);
-    }
-
-    static class Id<T> extends ListStage<T, T> {
-        @Override
-        public List<T> apply(List<T> v) {
-            return v;
-        }
-    }
-
-    private static class Map<T, U, V> extends ListStage<T, V> {
-        private final ListStage<T, U> chain;
-        private final Function<U, V> func;
-
-        public Map(ListStage<T, U> chain, Function<U, V> func) {
-            super();
-            this.chain = chain;
-            this.func = func;
-        }
-
-        @Override
-        public List<V> apply(List<T> v) {
-            return chain.apply(v).map(func);
-        }
-
-        @Override
-        public <X> ListStage<T, X> map(Function<V, X> f) {
-            return new Map(chain, func.andThen(f));
-        }
-    }
-}
-
 public class ExperimentationTest extends GraalCompilerTest {
 
     public static List<Integer> notFused(List<Integer> l) {
@@ -147,10 +76,6 @@ public class ExperimentationTest extends GraalCompilerTest {
         return l.map(v -> f2.apply(f1.apply(v)));
     }
 
-    public static List<Integer> fff(List<Integer> l) {
-        return (new ListStage.Id<Integer>()).map(v -> v + 1).map(v -> v + 2).apply(l);
-    }
-
     @Test
     public void test() {
 
@@ -170,7 +95,7 @@ public class ExperimentationTest extends GraalCompilerTest {
 
         System.out.println(l2);
 
-        StructuredGraph notFused = getGraph("fff");
+        StructuredGraph notFused = getGraph("pattern");
     }
 
     private StructuredGraph getGraph(String snippet) {
@@ -184,7 +109,7 @@ public class ExperimentationTest extends GraalCompilerTest {
             new CanonicalizerPhase().apply(graph, context);
             graph.getDebug().dump(DebugContext.BASIC_LEVEL, graph, "after canonicalizer ");
 
-            System.setProperty("graal.fusing", "org.graalvm.compiler.phases.common.fusing.List:org.graalvm.compiler.phases.common.fusing.ListFusing");
+            System.setProperty("graal.fusing", "org.graalvm.compiler.core.test.fusing.List:org.graalvm.compiler.core.test.fusing.ListFusing");
 
             InliningPhase inliningPhase = new InliningPhase(new CanonicalizerPhase());
 
