@@ -26,7 +26,7 @@ final class Config {
                     Class<?> fusingClass = ClassLoader.getSystemClassLoader().loadClass(mapping[1]);
                     configs.put(targetClass, fusingClass);
                 } catch (Exception e) {
-                    e.printStackTrace(); // TODO logging
+                    // TODO logging
                 }
             }
             // else TODO log invalid config
@@ -49,8 +49,9 @@ final class Config {
                 }
             }
             try {
-                Method fusingMethod = fusing.getMethod("fuse");
-                entries.add(new Entry(target, fusing, methods, fusingMethod));
+                Method fusingMethod = fusing.getMethod("fuse"); // TODO ensure it's static
+                Method stageMethod = fusing.getMethod("stage", target);
+                entries.add(new Entry(target, fusing, methods, fusingMethod, stageMethod));
             } catch (NoSuchMethodException | SecurityException e) {
                 e.printStackTrace(); // TODO logging
             }
@@ -63,13 +64,15 @@ final class Config {
         private final Class<?> fusingClass;
         private final Map<Method, Method> methods;
         private final Method fuseMethod;
+        private final Method stageMethod;
 
-        public Entry(Class<?> targetClass, Class<?> fusingClass, Map<Method, Method> methods, Method fuseMethod) {
+        public Entry(Class<?> targetClass, Class<?> fusingClass, Map<Method, Method> methods, Method fuseMethod, Method stageMethod) {
             super();
             this.targetClass = targetClass;
             this.fusingClass = fusingClass;
             this.methods = methods;
             this.fuseMethod = fuseMethod;
+            this.stageMethod = stageMethod;
         }
 
         public Class<?> getTargetClass() {
@@ -86,6 +89,10 @@ final class Config {
 
         public Method getFuseMethod() {
             return fuseMethod;
+        }
+
+        public Method getStageMethod() {
+            return stageMethod;
         }
     }
 

@@ -79,23 +79,27 @@ public class ExperimentationTest extends GraalCompilerTest {
     @Test
     public void test() {
 
-        List<Integer> l = new List<Integer>(1, 2, 3);
+        Function<Integer, Integer> f1 = v -> v + 1;
+        Function<Integer, Integer> f2 = v -> v + 2;
+        test("pattern", new List<>(1, 2, 3), f1, f2);
 
-        for (int i = 0; i < 10000; i++) {
-            l = pattern(l, v -> v + 1, v -> v + 2);
-        }
-
-        System.out.println(l);
-
-        List<Integer> l2 = new List<Integer>(1, 2, 3);
-
-        for (int i = 0; i < 10000; i++) {
-            l2 = notFused(l2);
-        }
-
-        System.out.println(l2);
-
-        StructuredGraph notFused = getGraph("pattern");
+// List<Integer> l = new List<Integer>(1, 2, 3);
+//
+// for (int i = 0; i < 10000; i++) {
+// l = pattern(l, v -> v + 1, v -> v + 2);
+// }
+//
+// System.out.println(l);
+//
+// List<Integer> l2 = new List<Integer>(1, 2, 3);
+//
+// for (int i = 0; i < 10000; i++) {
+// l2 = notFused(l2);
+// }
+//
+// System.out.println(l2);
+//
+// StructuredGraph notFused = getGraph("pattern");
     }
 
     private StructuredGraph getGraph(String snippet) {
@@ -118,13 +122,6 @@ public class ExperimentationTest extends GraalCompilerTest {
             fusingPhase.apply(graph, context);
 
             graph.getDebug().dump(DebugContext.BASIC_LEVEL, graph, "after fusing ");
-
-            NodeIterable<InvokeNode> nodes2 = graph.getNodes().filter(InvokeNode.class);
-
-            nodes2.forEach(c -> {
-                if (c.predecessor().getNodeClass() == c.getNodeClass())
-                    System.out.println(c);
-            });
 
 // new CanonicalizerPhase().apply(graph, context);
 // new DeadCodeEliminationPhase().apply(graph);

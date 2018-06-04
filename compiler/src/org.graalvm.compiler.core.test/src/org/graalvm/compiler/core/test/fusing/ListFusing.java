@@ -5,7 +5,7 @@ import org.graalvm.compiler.phases.common.fusing.Fusing;
 
 public abstract class ListFusing<T> implements Fusing<List<T>> {
 
-    public static <T> ListFusing<T> apply(List<T> l) {
+    public static <T> ListFusing<T> stage(List<T> l) {
         return new ListFusing.Value<>(l);
     }
 
