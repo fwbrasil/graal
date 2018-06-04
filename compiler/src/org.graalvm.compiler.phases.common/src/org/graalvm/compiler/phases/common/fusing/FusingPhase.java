@@ -44,6 +44,8 @@ public class FusingPhase extends BasePhase<HighTierContext> {
 
             Set<InvokeNode> roots = roots(fusingMap);
 
+            graph.getDebug().dump(DebugContext.BASIC_LEVEL, graph, "before fusing " + entry.getFusingClass());
+
             roots.forEach(invoke -> {
                 ResolvedJavaMethod stageMethod = context.getMetaAccess().lookupJavaMethod(entry.getStageMethod());
                 InvokeNode stageInvoke = createInvoke(graph, stageMethod, InvokeKind.Static, invoke.callTarget().arguments().first());
@@ -73,9 +75,8 @@ public class FusingPhase extends BasePhase<HighTierContext> {
                 fuseInvoke.setStateAfter(curr.stateAfter());
                 next.replaceAtPredecessor(fuseInvoke);
                 fuseInvoke.replaceFirstSuccessor(null, next);
-
-                graph.getDebug().dump(DebugContext.BASIC_LEVEL, graph, "after fusing " + entry.getFusingClass());
             });
+            graph.getDebug().dump(DebugContext.BASIC_LEVEL, graph, "after fusing " + entry.getFusingClass());
             inliningPhase.apply(graph, context);
         });
     }

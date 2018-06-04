@@ -113,7 +113,7 @@ public class ExperimentationTest extends GraalCompilerTest {
             new CanonicalizerPhase().apply(graph, context);
             graph.getDebug().dump(DebugContext.BASIC_LEVEL, graph, "after canonicalizer ");
 
-            System.setProperty("graal.fusing", "org.graalvm.compiler.core.test.fusing.List:org.graalvm.compiler.core.test.fusing.ListFusing");
+            System.setProperty("fusing", "org.graalvm.compiler.core.test.fusing.List:org.graalvm.compiler.core.test.fusing.ListFusing");
 
             InliningPhase inliningPhase = new InliningPhase(new CanonicalizerPhase());
 

@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 final class Config {
 
@@ -17,7 +18,7 @@ final class Config {
 
     private static final Map<Class<?>, Class<?>> parseConfig() {
         Map<Class<?>, Class<?>> configs = new HashMap<>();
-        String[] entries = System.getProperty("graal.fusing").split(",");
+        String[] entries = Optional.ofNullable(System.getProperty("fusing").split(",")).orElse(new String[0]);
         for (String entry : entries) {
             String[] mapping = entry.split(":");
             if (mapping.length == 2) {
@@ -45,7 +46,7 @@ final class Config {
                         methods.put(m, f);
                     }
                 } catch (NoSuchMethodException | SecurityException e) {
-                    e.printStackTrace(); // TODO logging
+                    // TODO logging
                 }
             }
             try {
@@ -53,7 +54,7 @@ final class Config {
                 Method stageMethod = fusing.getMethod("stage", target);
                 entries.add(new Entry(target, fusing, methods, fusingMethod, stageMethod));
             } catch (NoSuchMethodException | SecurityException e) {
-                e.printStackTrace(); // TODO logging
+                // TODO logging
             }
         });
         return entries;
