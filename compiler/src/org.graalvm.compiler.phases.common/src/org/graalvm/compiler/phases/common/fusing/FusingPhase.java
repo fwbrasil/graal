@@ -74,6 +74,7 @@ public class FusingPhase extends BasePhase<HighTierContext> {
                 fuseInvoke.setUseForInlining(true);
                 fuseInvoke.setStateAfter(curr.stateAfter());
                 next.replaceAtPredecessor(fuseInvoke);
+                next.replaceFirstInput(curr, fuseInvoke);
                 fuseInvoke.replaceFirstSuccessor(null, next);
             });
             graph.getDebug().dump(DebugContext.BASIC_LEVEL, graph, "after fusing " + entry.getFusingClass());
