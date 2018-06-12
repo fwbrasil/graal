@@ -20,7 +20,7 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package org.graalvm.compiler.core.test.fusing;
+package org.graalvm.compiler.core.test.fusion;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -43,7 +43,7 @@ import org.graalvm.compiler.phases.common.CanonicalizerPhase;
 import org.graalvm.compiler.phases.common.DeadCodeEliminationPhase;
 import org.graalvm.compiler.phases.common.LockEliminationPhase;
 import org.graalvm.compiler.phases.common.LoweringPhase;
-import org.graalvm.compiler.phases.common.fusing.FusingPhase;
+import org.graalvm.compiler.phases.common.fusion.MethodFusionPhase;
 import org.graalvm.compiler.phases.common.inlining.InliningPhase;
 import org.graalvm.compiler.phases.tiers.HighTierContext;
 import org.junit.Test;
@@ -56,8 +56,8 @@ public class ExperimentationTest extends GraalCompilerTest {
         return l.map(i -> i + 1).map(i -> i + 2);
     }
 
-    public static List<Integer> fused(List<Integer> l) {
-        return l.map(i -> i + 1 + 2);
+    public static List<Integer> fused(List<Integer> l, Function<Integer, Integer> f1, Function<Integer, Integer> f2) {
+        return ListFusion.stage(l).map(f1).map(f2).fuse();
     }
 
     public static List<Integer> fused2(List<Integer> l) {
@@ -78,6 +78,8 @@ public class ExperimentationTest extends GraalCompilerTest {
 
     @Test
     public void test() {
+
+        System.setProperty("fusion", "org.graalvm.compiler.core.test.fusion.List:org.graalvm.compiler.core.test.fusion.ListFusion");
 
         Function<Integer, Integer> f1 = v -> v + 1;
         Function<Integer, Integer> f2 = v -> v + 2;
@@ -113,11 +115,9 @@ public class ExperimentationTest extends GraalCompilerTest {
             new CanonicalizerPhase().apply(graph, context);
             graph.getDebug().dump(DebugContext.BASIC_LEVEL, graph, "after canonicalizer ");
 
-            System.setProperty("fusing", "org.graalvm.compiler.core.test.fusing.List:org.graalvm.compiler.core.test.fusing.ListFusing");
-
             InliningPhase inliningPhase = new InliningPhase(new CanonicalizerPhase());
 
-            FusingPhase fusingPhase = new FusingPhase(inliningPhase);
+            MethodFusionPhase fusingPhase = new MethodFusionPhase(inliningPhase);
 
             fusingPhase.apply(graph, context);
 

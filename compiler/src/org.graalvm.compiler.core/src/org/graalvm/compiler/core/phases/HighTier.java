@@ -52,7 +52,7 @@ import org.graalvm.compiler.phases.common.IncrementalCanonicalizerPhase;
 import org.graalvm.compiler.phases.common.IterativeConditionalEliminationPhase;
 import org.graalvm.compiler.phases.common.LoweringPhase;
 import org.graalvm.compiler.phases.common.RemoveValueProxyPhase;
-import org.graalvm.compiler.phases.common.fusing.FusingPhase;
+import org.graalvm.compiler.phases.common.fusion.MethodFusionPhase;
 import org.graalvm.compiler.phases.common.inlining.InliningPhase;
 import org.graalvm.compiler.phases.tiers.HighTierContext;
 import org.graalvm.compiler.virtual.phases.ea.EarlyReadEliminationPhase;
@@ -82,7 +82,7 @@ public class HighTier extends PhaseSuite<HighTierContext> {
 
         if (Options.Inline.getValue(options)) {
             InliningPhase inliningPhase = new InliningPhase(canonicalizer);
-            appendPhase(new FusingPhase(inliningPhase));
+            appendPhase(new MethodFusionPhase(inliningPhase));
             appendPhase(inliningPhase);
             appendPhase(new DeadCodeEliminationPhase(Optional));
         }

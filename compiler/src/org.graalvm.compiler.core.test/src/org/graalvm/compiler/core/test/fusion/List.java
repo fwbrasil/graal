@@ -1,4 +1,4 @@
-package org.graalvm.compiler.core.test.fusing;
+package org.graalvm.compiler.core.test.fusion;
 
 import java.util.Arrays;
 import java.util.function.Function;

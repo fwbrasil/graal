@@ -1,4 +1,4 @@
-package org.graalvm.compiler.phases.common.fusing;
+package org.graalvm.compiler.phases.common.fusion;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -18,14 +18,14 @@ final class Config {
 
     private static final Map<Class<?>, Class<?>> parseConfig() {
         Map<Class<?>, Class<?>> configs = new HashMap<>();
-        String[] entries = Optional.ofNullable(System.getProperty("fusing").split(",")).orElse(new String[0]);
+        String[] entries = Optional.ofNullable(System.getProperty("fusion")).map(v -> v.split(",")).orElse(new String[0]);
         for (String entry : entries) {
             String[] mapping = entry.split(":");
             if (mapping.length == 2) {
                 try {
                     Class<?> targetClass = ClassLoader.getSystemClassLoader().loadClass(mapping[0]);
-                    Class<?> fusingClass = ClassLoader.getSystemClassLoader().loadClass(mapping[1]);
-                    configs.put(targetClass, fusingClass);
+                    Class<?> fusionClass = ClassLoader.getSystemClassLoader().loadClass(mapping[1]);
+                    configs.put(targetClass, fusionClass);
                 } catch (Exception e) {
                     // TODO logging
                 }
@@ -37,12 +37,12 @@ final class Config {
 
     private static final List<Entry> entries(Map<Class<?>, Class<?>> configs) {
         List<Entry> entries = new ArrayList<>();
-        configs.forEach((target, fusing) -> {
+        configs.forEach((target, fusion) -> {
             Map<Method, Method> methods = new HashMap<>();
             for (Method m : target.getMethods()) {
                 try {
                     if (m.getDeclaringClass() != Object.class) {
-                        Method f = fusing.getMethod(m.getName(), m.getParameterTypes());
+                        Method f = fusion.getMethod(m.getName(), m.getParameterTypes());
                         methods.put(m, f);
                     }
                 } catch (NoSuchMethodException | SecurityException e) {
@@ -50,9 +50,9 @@ final class Config {
                 }
             }
             try {
-                Method fusingMethod = fusing.getMethod("fuse"); // TODO ensure it's static
-                Method stageMethod = fusing.getMethod("stage", target);
-                entries.add(new Entry(target, fusing, methods, fusingMethod, stageMethod));
+                Method fusionMethod = fusion.getMethod("fuse"); // TODO ensure it's static
+                Method stageMethod = fusion.getMethod("stage", target);
+                entries.add(new Entry(target, fusion, methods, fusionMethod, stageMethod));
             } catch (NoSuchMethodException | SecurityException e) {
                 // TODO logging
             }
@@ -62,15 +62,15 @@ final class Config {
 
     public static class Entry {
         private final Class<?> targetClass;
-        private final Class<?> fusingClass;
+        private final Class<?> fusionClass;
         private final Map<Method, Method> methods;
         private final Method fuseMethod;
         private final Method stageMethod;
 
-        public Entry(Class<?> targetClass, Class<?> fusingClass, Map<Method, Method> methods, Method fuseMethod, Method stageMethod) {
+        public Entry(Class<?> targetClass, Class<?> fusionClass, Map<Method, Method> methods, Method fuseMethod, Method stageMethod) {
             super();
             this.targetClass = targetClass;
-            this.fusingClass = fusingClass;
+            this.fusionClass = fusionClass;
             this.methods = methods;
             this.fuseMethod = fuseMethod;
             this.stageMethod = stageMethod;
@@ -80,8 +80,8 @@ final class Config {
             return targetClass;
         }
 
-        public Class<?> getFusingClass() {
-            return fusingClass;
+        public Class<?> getFusionClass() {
+            return fusionClass;
         }
 
         public Map<Method, Method> getMethods() {

@@ -20,7 +20,7 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package org.graalvm.compiler.phases.common.fusing;
+package org.graalvm.compiler.phases.common.fusion;
 
 import static org.graalvm.compiler.bytecode.Bytecodes.DUP;
 import static org.graalvm.compiler.bytecode.Bytecodes.DUP2;
