@@ -76,10 +76,22 @@ public class ExperimentationTest extends GraalCompilerTest {
         return l.map(v -> f2.apply(f1.apply(v)));
     }
 
+    public static boolean a = false;
+
+    public static List<Integer> sideEffect(List<Integer> l, Function<Integer, Integer> f1, Function<Integer, Integer> f2) {
+        return l.map(i -> {
+            if (a)
+                return f1.apply(i);
+            else
+                return i + 1;
+        });
+    }
+
     @Test
     public void test() {
 
-        System.setProperty("fusion", "org.graalvm.compiler.core.test.fusion.List:org.graalvm.compiler.core.test.fusion.ListFusion");
+        System.setProperty("fusion",
+                        "org.graalvm.compiler.core.test.fusion.List:org.graalvm.compiler.core.test.fusion.ListFusion");
 
         Function<Integer, Integer> f1 = v -> v + 1;
         Function<Integer, Integer> f2 = v -> v + 2;

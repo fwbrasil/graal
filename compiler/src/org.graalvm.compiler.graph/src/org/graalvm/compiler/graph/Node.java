@@ -591,7 +591,7 @@ public abstract class Node implements Cloneable, Formattable, NodeInterface {
      * oldSuccessor to newSuccessor: removes this node from oldSuccessor's predecessors and adds
      * this node to newSuccessor's predecessors.
      */
-    protected void updatePredecessor(Node oldSuccessor, Node newSuccessor) {
+    public void updatePredecessor(Node oldSuccessor, Node newSuccessor) {
         assert isAlive() && (newSuccessor == null || newSuccessor.isAlive()) || newSuccessor == null && !isAlive() : "adding " + newSuccessor + " to " + this + " instead of " + oldSuccessor;
         assert graph == null || !graph.isFrozen();
         if (oldSuccessor != newSuccessor) {
@@ -600,7 +600,8 @@ public abstract class Node implements Cloneable, Formattable, NodeInterface {
                 oldSuccessor.predecessor = null;
             }
             if (newSuccessor != null) {
-                assert assertTrue(newSuccessor.predecessor == null, "unexpected non-null predecessor in new successor (%s): %s, this=%s", newSuccessor, newSuccessor.predecessor, this);
+// assert assertTrue(newSuccessor.predecessor == null, "unexpected non-null predecessor in new
+// successor (%s): %s, this=%s", newSuccessor, newSuccessor.predecessor, this);
                 newSuccessor.predecessor = this;
             }
         }
