@@ -13,6 +13,7 @@ import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.graph.Node;
 import org.graalvm.compiler.graph.NodeSourcePosition;
 import org.graalvm.compiler.nodes.CallTargetNode.InvokeKind;
+import org.graalvm.compiler.nodes.FixedNode;
 import org.graalvm.compiler.nodes.FrameState;
 import org.graalvm.compiler.nodes.InvokeNode;
 import org.graalvm.compiler.nodes.StructuredGraph;
@@ -59,8 +60,7 @@ public class MethodFusionPhase extends BasePhase<HighTierContext> {
         public void run() {
             Map<Entry, Map<InvokeNode, ResolvedJavaMethod>> toFuse = prepare();
 
-            if (!toFuse.isEmpty())
-                inliningPhase.apply(graph, context);
+            inliningPhase.apply(graph, context);
 
             toFuse.forEach((entry, fusionMap) -> {
 
@@ -68,42 +68,42 @@ public class MethodFusionPhase extends BasePhase<HighTierContext> {
 
                 dump("before fusion %s", entry.getFusionClass());
 
-                roots.forEach(originalRoot -> {
+                roots.forEach(invoke -> {
 
-                    FrameState previousState = previousState(originalRoot);
+                    FrameState state = previousState(invoke.predecessor());
 
-                    InvokeNode newRoot = createInvoke(previousState, entry.getStageMethod(), InvokeKind.Static, originalRoot.callTarget().arguments().first());
+                    InvokeNode stageInvoke = createInvoke(entry.getStageMethod(), InvokeKind.Static, invoke.callTarget().arguments().first());
 
-                    InvokeNode originalInvoke = originalRoot;
-                    InvokeNode newInvoke = newRoot;
+                    invoke.replaceAtPredecessor(stageInvoke);
+                    stageInvoke.replaceFirstSuccessor(null, invoke);
+                    stageInvoke.setStateAfter(state);
+
+                    invoke.callTarget().replaceFirstInput(invoke.callTarget().arguments().first(), stageInvoke);
+
+                    InvokeNode curr = invoke;
                     while (true) {
 
-                        ValueNode[] args = originalInvoke.callTarget().arguments().toArray(new ValueNode[0]);
-                        args[0] = newInvoke;
-                        InvokeNode fusedInvoke = createInvoke(previousState, fusionMap.get(originalInvoke), InvokeKind.Virtual, args);
-                        newInvoke.replaceFirstSuccessor(null, fusedInvoke);
-                        newInvoke = fusedInvoke;
+                        FixedNode next = curr.next();
+                        InvokeNode newInvoke = createInvoke(fusionMap.get(curr), InvokeKind.Virtual, curr.callTarget().arguments().first());
 
-                        if (fusionMap.containsKey(originalInvoke.next()))
-                            originalInvoke = (InvokeNode) originalInvoke.next();
+                        curr.callTarget().replaceAndDelete(newInvoke.callTarget());
+                        graph.replaceFixedWithFixed(curr, newInvoke);
+                        newInvoke.setStateAfter(state);
+
+                        curr = newInvoke;
+                        if (fusionMap.containsKey(next))
+                            curr = (InvokeNode) next;
                         else
                             break;
                     }
 
-                    InvokeNode leafInvoke = createInvoke(originalInvoke.stateAfter(), entry.getFuseMethod(), InvokeKind.Virtual, newInvoke);
-                    newInvoke.replaceFirstSuccessor(null, leafInvoke);
+                    InvokeNode fuseInvoke = createInvoke(entry.getFuseMethod(), InvokeKind.Virtual, curr);
 
-                    originalRoot.predecessor().replaceFirstSuccessor(originalRoot, newRoot);
+                    Node next = curr.next();
 
-                    leafInvoke.replaceFirstSuccessor(null, originalInvoke.next());
-                    originalInvoke.next().replaceFirstInput(originalInvoke, leafInvoke);
-
-                    Node toRemove = originalInvoke;
-                    while (toRemove != null) {
-                        toRemove.clearInputs();
-                        toRemove.clearSuccessors();
-                        toRemove = toRemove.predecessor();
-                    }
+                    next.replaceAtPredecessor(fuseInvoke);
+                    next.replaceFirstInput(curr, fuseInvoke);
+                    fuseInvoke.replaceFirstSuccessor(null, next);
                 });
 
                 dump("after fusion %s", entry.getFusionClass());
@@ -135,11 +135,11 @@ public class MethodFusionPhase extends BasePhase<HighTierContext> {
             }
         }
 
-        private InvokeNode createInvoke(FrameState state, Method method, InvokeKind invokeKind, ValueNode... args) {
-            return createInvoke(state, context.getMetaAccess().lookupJavaMethod(method), invokeKind, args);
+        private InvokeNode createInvoke(Method method, InvokeKind invokeKind, ValueNode... args) {
+            return createInvoke(context.getMetaAccess().lookupJavaMethod(method), invokeKind, args);
         }
 
-        private InvokeNode createInvoke(FrameState state, ResolvedJavaMethod method, InvokeKind invokeKind, ValueNode... args) {
+        private InvokeNode createInvoke(ResolvedJavaMethod method, InvokeKind invokeKind, ValueNode... args) {
             try (DebugCloseable context = graph.withNodeSourcePosition(NodeSourcePosition.substitution(graph.currentNodeSourcePosition(), method))) {
                 assert method.isStatic() == (invokeKind == InvokeKind.Static);
                 Signature signature = method.getSignature();
@@ -147,7 +147,6 @@ public class MethodFusionPhase extends BasePhase<HighTierContext> {
                 StampPair returnStamp = StampFactory.forDeclaredType(graph.getAssumptions(), returnType, false);
                 MethodCallTargetNode callTarget = graph.add(new MethodCallTargetNode(invokeKind, method, args, returnStamp, null));
                 InvokeNode invoke = graph.addOrUniqueWithInputs(new InvokeNode(callTarget, BytecodeFrame.BEFORE_BCI));
-                invoke.setStateAfter(state);
                 return invoke;
             }
         }
