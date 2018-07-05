@@ -27,6 +27,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import org.graalvm.compiler.core.test.GraalCompilerTest;
@@ -87,15 +88,32 @@ public class ExperimentationTest extends GraalCompilerTest {
         });
     }
 
+    public static boolean stringEquals(String a, String b) {
+        return sub(a, b + 1);
+    }
+
+    public static boolean sub(String a, String b) {
+        return a.equals(b);
+    }
+
+    public static boolean atomic() {
+        AtomicInteger a = new AtomicInteger(0);
+        return a.compareAndSet(0, 1);
+    }
+
     @Test
     public void test() {
 
         System.setProperty("fusion",
                         "org.graalvm.compiler.core.test.fusion.List:org.graalvm.compiler.core.test.fusion.ListFusion");
 
+        ListFusion.stage(new List(1, 2));
+
         Function<Integer, Integer> f1 = v -> v + 1;
         Function<Integer, Integer> f2 = v -> v + 2;
         test("pattern", new List<>(1, 2, 3), f1, f2);
+
+// test("stringEquals", "aa", "bb");
 
 // List<Integer> l = new List<Integer>(1, 2, 3);
 //

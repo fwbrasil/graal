@@ -1208,7 +1208,7 @@ public class Graph {
                     if (root == null) {
                         root = pos.getRootMethod();
                     } else {
-                        assert pos.verifyRootMethod(root) : node;
+// assert pos.verifyRootMethod(root) : node;
                     }
                 }
             }

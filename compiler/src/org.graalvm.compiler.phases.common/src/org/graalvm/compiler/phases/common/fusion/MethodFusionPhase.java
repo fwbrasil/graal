@@ -72,7 +72,7 @@ public class MethodFusionPhase extends BasePhase<HighTierContext> {
 
                     FrameState state = previousState(invoke.predecessor());
 
-                    InvokeNode stageInvoke = createInvoke(entry.getStageMethod(), InvokeKind.Static, invoke.callTarget().arguments().first());
+                    InvokeNode stageInvoke = createInvoke(state.bci, entry.getStageMethod(), InvokeKind.Static, invoke.callTarget().arguments().first());
 
                     invoke.replaceAtPredecessor(stageInvoke);
                     stageInvoke.replaceFirstSuccessor(null, invoke);
@@ -81,10 +81,12 @@ public class MethodFusionPhase extends BasePhase<HighTierContext> {
                     invoke.callTarget().replaceFirstInput(invoke.callTarget().arguments().first(), stageInvoke);
 
                     InvokeNode curr = invoke;
+                    FrameState lastState = curr.stateAfter();
                     while (true) {
 
+                        lastState = curr.stateAfter();
                         FixedNode next = curr.next();
-                        InvokeNode newInvoke = createInvoke(fusionMap.get(curr), InvokeKind.Virtual, curr.callTarget().arguments().first());
+                        InvokeNode newInvoke = createInvoke(state.bci, fusionMap.get(curr), InvokeKind.Virtual, curr.callTarget().arguments().first());
 
                         curr.callTarget().replaceAndDelete(newInvoke.callTarget());
                         graph.replaceFixedWithFixed(curr, newInvoke);
@@ -97,7 +99,8 @@ public class MethodFusionPhase extends BasePhase<HighTierContext> {
                             break;
                     }
 
-                    InvokeNode fuseInvoke = createInvoke(entry.getFuseMethod(), InvokeKind.Virtual, curr);
+                    InvokeNode fuseInvoke = createInvoke(lastState.bci, entry.getFuseMethod(), InvokeKind.Virtual, curr);
+                    fuseInvoke.setStateAfter(lastState);
 
                     Node next = curr.next();
 
@@ -135,18 +138,18 @@ public class MethodFusionPhase extends BasePhase<HighTierContext> {
             }
         }
 
-        private InvokeNode createInvoke(Method method, InvokeKind invokeKind, ValueNode... args) {
-            return createInvoke(context.getMetaAccess().lookupJavaMethod(method), invokeKind, args);
+        private InvokeNode createInvoke(int bci, Method method, InvokeKind invokeKind, ValueNode... args) {
+            return createInvoke(bci, context.getMetaAccess().lookupJavaMethod(method), invokeKind, args);
         }
 
-        private InvokeNode createInvoke(ResolvedJavaMethod method, InvokeKind invokeKind, ValueNode... args) {
+        private InvokeNode createInvoke(int bci, ResolvedJavaMethod method, InvokeKind invokeKind, ValueNode... args) {
             try (DebugCloseable context = graph.withNodeSourcePosition(NodeSourcePosition.substitution(graph.currentNodeSourcePosition(), method))) {
                 assert method.isStatic() == (invokeKind == InvokeKind.Static);
                 Signature signature = method.getSignature();
-                JavaType returnType = signature.getReturnType(null);
+                JavaType returnType = signature.getReturnType(outerMethod.getDeclaringClass());
                 StampPair returnStamp = StampFactory.forDeclaredType(graph.getAssumptions(), returnType, false);
                 MethodCallTargetNode callTarget = graph.add(new MethodCallTargetNode(invokeKind, method, args, returnStamp, null));
-                InvokeNode invoke = graph.addOrUniqueWithInputs(new InvokeNode(callTarget, BytecodeFrame.BEFORE_BCI));
+                InvokeNode invoke = graph.addOrUniqueWithInputs(new InvokeNode(callTarget, bci));
                 return invoke;
             }
         }
