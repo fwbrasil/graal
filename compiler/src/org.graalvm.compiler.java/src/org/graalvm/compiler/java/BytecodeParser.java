@@ -2176,6 +2176,17 @@ public class BytecodeParser implements GraphBuilderContext {
      */
     private InlineInfo tryInline(ValueNode[] args, ResolvedJavaMethod targetMethod) {
         boolean canBeInlined = forceInliningEverything || parsingIntrinsic() || targetMethod.canBeInlined();
+
+        try {
+            String property = System.getProperty("FuseClass");
+            if (property != null) {
+                ResolvedJavaType fuseClass = getMetaAccess().lookupJavaType(ClassLoader.getSystemClassLoader().loadClass(property));
+                if (targetMethod.getDeclaringClass().isAssignableFrom(fuseClass))
+                    return null;
+            }
+        } catch (ClassNotFoundException e) {
+        }
+
         if (!canBeInlined) {
             return null;
         }
