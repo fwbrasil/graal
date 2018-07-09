@@ -43,6 +43,7 @@ import org.graalvm.compiler.nodes.spi.LoweringTool;
 import org.graalvm.compiler.nodes.spi.NodeLIRBuilderTool;
 import org.graalvm.compiler.nodes.spi.UncheckedInterfaceProvider;
 import org.graalvm.compiler.nodes.util.GraphUtil;
+import org.graalvm.compiler.phases.common.fusion.MethodFusionConfig;
 import org.graalvm.word.LocationIdentity;
 
 import java.util.Map;
@@ -126,7 +127,7 @@ public final class InvokeNode extends AbstractMemoryCheckpoint implements Invoke
 
     @Override
     public boolean useForInlining() {
-        return useForInlining;
+        return useForInlining && MethodFusionConfig.shouldInline(callTarget.targetMethod);
     }
 
     @Override

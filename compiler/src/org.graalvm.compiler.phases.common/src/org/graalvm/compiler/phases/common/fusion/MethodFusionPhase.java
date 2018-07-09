@@ -62,7 +62,10 @@ public class MethodFusionPhase extends BasePhase<HighTierContext> {
 
             dump("before fusion");
 
-            Map<Method, Method> fusionMap = fusionMap();
+            inliningPhase.apply(graph, context);
+            dump("after fusion partial inlining");
+
+            Map<Method, Method> fusionMap = MethodFusionConfig.fusionMap;
             Map<InvokeNode, ResolvedJavaMethod> toFuse = new HashMap<>();
             graph.getNodes().filter(InvokeNode.class).forEach(invoke -> {
                 for (Map.Entry<Method, Method> e : fusionMap.entrySet()) {
@@ -70,29 +73,24 @@ public class MethodFusionPhase extends BasePhase<HighTierContext> {
                     ResolvedJavaMethod invokeMethod = invoke.callTarget().targetMethod();
                     if (fusedMethod.getSignature().getReturnKind().equals(invokeMethod.getSignature().getReturnKind()) && fusedMethod.getName().equals(invokeMethod.getName()) &&
                                     Arrays.equals(fusedMethod.getParameters(), invokeMethod.getParameters())) {
-                        invoke.setUseForInlining(false);
                         toFuse.put(invoke, resolve(e.getValue()));
                     }
                 }
             });
 
-            if (!toFuse.isEmpty()) {
-                inliningPhase.apply(graph, context);
-                dump("after fusion inlining");
-
-                Set<InvokeNode> leafs = leafs(toFuse);
-                for (InvokeNode leaf : leafs) {
-                    Node curr = leaf.callTarget().arguments().first();
-                    while (toFuse.containsKey(curr)) {
-                        InvokeNode i = (InvokeNode) curr;
-                        i.callTarget().setTargetMethod(toFuse.get(curr));
-                        i.setUseForInlining(true);
-                        curr = i.callTarget().arguments().first();
-                    }
+            Set<InvokeNode> leafs = leafs(toFuse);
+            for (InvokeNode leaf : leafs) {
+                Node curr = leaf.callTarget().arguments().first();
+                while (toFuse.containsKey(curr)) {
+                    InvokeNode i = (InvokeNode) curr;
+                    i.callTarget().setTargetMethod(toFuse.get(curr));
+                    curr = i.callTarget().arguments().first();
                 }
             }
+            dump("after fusion redirect");
 
-            dump("after fusion");
+            MethodFusionConfig.withInlineAll(() -> inliningPhase.apply(graph, context));
+            dump("after fusion full inlining");
         }
 
         private ResolvedJavaMethod resolve(Method m) {
@@ -112,32 +110,5 @@ public class MethodFusionPhase extends BasePhase<HighTierContext> {
             return leafs;
         }
 
-        private Map<Method, Method> fusionMap() {
-            String fuseClass = System.getProperty("FuseClass");
-            if (fuseClass == null)
-                return new HashMap<>();
-            Class<?> cls;
-            try {
-                cls = ClassLoader.getSystemClassLoader().loadClass(fuseClass);
-            } catch (ClassNotFoundException e) {
-                throw new RuntimeException(e);
-            }
-
-            Map<String, Method> byName = new HashMap<>();
-            for (Method m : cls.getMethods())
-                byName.put(m.getName(), m);
-
-            Map<Method, Method> toFuse = new HashMap<>();
-            for (Method m : cls.getMethods()) {
-                String fusedName = "fused" + StringUtils.capitalize(m.getName());
-                if (byName.containsKey(fusedName)) {
-                    Method fusedMethod = byName.get(fusedName);
-                    if (fusedMethod.getReturnType().equals(m.getReturnType()) &&
-                                    Arrays.equals(m.getParameterTypes(), fusedMethod.getParameterTypes()))
-                        toFuse.put(m, fusedMethod);
-                }
-            }
-            return toFuse;
-        }
     }
 }
