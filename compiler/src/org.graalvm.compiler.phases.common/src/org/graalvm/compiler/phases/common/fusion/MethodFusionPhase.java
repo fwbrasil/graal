@@ -37,6 +37,13 @@ import jdk.vm.ci.meta.Signature;
 
 public class MethodFusionPhase extends BasePhase<HighTierContext> {
 
+    private final InliningPhase inliningPhase;
+
+    public MethodFusionPhase(InliningPhase inliningPhase) {
+        super();
+        this.inliningPhase = inliningPhase;
+    }
+
     @Override
     protected void run(StructuredGraph graph, HighTierContext context) {
         new Instance(graph, context).run();
@@ -62,17 +69,26 @@ public class MethodFusionPhase extends BasePhase<HighTierContext> {
                     ResolvedJavaMethod fusedMethod = resolve(e.getKey());
                     ResolvedJavaMethod invokeMethod = invoke.callTarget().targetMethod();
                     if (fusedMethod.getSignature().getReturnKind().equals(invokeMethod.getSignature().getReturnKind()) && fusedMethod.getName().equals(invokeMethod.getName()) &&
-                                    Arrays.equals(fusedMethod.getParameters(), invokeMethod.getParameters()))
+                                    Arrays.equals(fusedMethod.getParameters(), invokeMethod.getParameters())) {
+                        invoke.setUseForInlining(false);
                         toFuse.put(invoke, resolve(e.getValue()));
+                    }
                 }
             });
 
-            Set<InvokeNode> roots = roots(toFuse);
-            for (InvokeNode root : roots) {
-                InvokeNode curr = root;
-                while (toFuse.containsKey(curr.next())) {
-                    curr.callTarget().setTargetMethod(toFuse.get(curr));
-                    curr = (InvokeNode) curr.next();
+            if (!toFuse.isEmpty()) {
+                inliningPhase.apply(graph, context);
+                dump("after fusion inlining");
+
+                Set<InvokeNode> leafs = leafs(toFuse);
+                for (InvokeNode leaf : leafs) {
+                    Node curr = leaf.callTarget().arguments().first();
+                    while (toFuse.containsKey(curr)) {
+                        InvokeNode i = (InvokeNode) curr;
+                        i.callTarget().setTargetMethod(toFuse.get(curr));
+                        i.setUseForInlining(true);
+                        curr = i.callTarget().arguments().first();
+                    }
                 }
             }
 
@@ -87,18 +103,13 @@ public class MethodFusionPhase extends BasePhase<HighTierContext> {
             graph.getDebug().dump(DebugContext.BASIC_LEVEL, graph, String.format(format, args));
         }
 
-        private Set<InvokeNode> roots(Map<InvokeNode, ResolvedJavaMethod> fusionMap) {
-            Set<InvokeNode> roots = new HashSet<>();
+        private Set<InvokeNode> leafs(Map<InvokeNode, ResolvedJavaMethod> fusionMap) {
+            Set<InvokeNode> leafs = new HashSet<>();
+            leafs.addAll(fusionMap.keySet());
             fusionMap.forEach((invoke, fused) -> {
-                if (fusionMap.containsKey(invoke.predecessor()) || fusionMap.containsKey(invoke.next())) {
-                    InvokeNode curr = invoke;
-                    while (fusionMap.containsKey(curr.predecessor())) {
-                        curr = (InvokeNode) curr.predecessor();
-                    }
-                    roots.add(curr);
-                }
+                leafs.remove(invoke.callTarget().arguments().first());
             });
-            return roots;
+            return leafs;
         }
 
         private Map<Method, Method> fusionMap() {

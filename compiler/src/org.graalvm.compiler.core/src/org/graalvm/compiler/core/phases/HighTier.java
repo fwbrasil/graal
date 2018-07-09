@@ -82,10 +82,10 @@ public class HighTier extends PhaseSuite<HighTierContext> {
             appendPhase(new NodeCounterPhase(NodeCounterPhase.Stage.INIT));
         }
 
-        appendPhase(new MethodFusionPhase());
-
         if (Options.Inline.getValue(options)) {
-            appendPhase(new InliningPhase(canonicalizer));
+            InliningPhase inliningPhase = new InliningPhase(canonicalizer);
+            appendPhase(new MethodFusionPhase(inliningPhase));
+            appendPhase(inliningPhase);
             appendPhase(new DeadCodeEliminationPhase(Optional));
         }
 
