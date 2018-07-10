@@ -79,14 +79,20 @@ public class MethodFusionPhase extends BasePhase<HighTierContext> {
             });
 
             Set<InvokeNode> leafs = leafs(toFuse);
+            int fusions = 0;
             for (InvokeNode leaf : leafs) {
                 Node curr = leaf.callTarget().arguments().first();
                 while (toFuse.containsKey(curr)) {
                     InvokeNode i = (InvokeNode) curr;
                     i.callTarget().setTargetMethod(toFuse.get(curr));
+                    fusions++;
                     curr = i.callTarget().arguments().first();
                 }
             }
+
+            if (fusions > 0)
+                System.out.println(fusions + " fusions " + graph.asJavaMethod());
+
             dump("after fusion redirect");
 
             MethodFusionConfig.withInlineAll(() -> inliningPhase.apply(graph, context));

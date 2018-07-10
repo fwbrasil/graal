@@ -426,6 +426,8 @@ import org.graalvm.compiler.phases.OptimisticOptimizations;
 import org.graalvm.compiler.phases.util.ValueMergeUtil;
 import org.graalvm.word.LocationIdentity;
 
+import com.sun.xml.internal.ws.util.StringUtils;
+
 import jdk.vm.ci.code.BailoutException;
 import jdk.vm.ci.code.BytecodeFrame;
 import jdk.vm.ci.code.CodeUtil;
@@ -2177,18 +2179,15 @@ public class BytecodeParser implements GraphBuilderContext {
     private InlineInfo tryInline(ValueNode[] args, ResolvedJavaMethod targetMethod) {
         boolean canBeInlined = forceInliningEverything || parsingIntrinsic() || targetMethod.canBeInlined();
 
-        try {
-            String property = System.getProperty("FuseClass");
-            if (property != null) {
-                ResolvedJavaType fuseClass = getMetaAccess().lookupJavaType(ClassLoader.getSystemClassLoader().loadClass(property));
-                if (targetMethod.getDeclaringClass().isAssignableFrom(fuseClass))
-                    return null;
-            }
-        } catch (ClassNotFoundException e) {
-        }
-
         if (!canBeInlined) {
             return null;
+        }
+
+        if (System.getProperty("FuseClass") != null) {
+            String name = "fused" + StringUtils.capitalize(targetMethod.getName());
+            ResolvedJavaMethod fusedMethod = targetMethod.getDeclaringClass().findMethod(name, targetMethod.getSignature());
+            if (fusedMethod != null)
+                return null;
         }
 
         if (forceInliningEverything) {
