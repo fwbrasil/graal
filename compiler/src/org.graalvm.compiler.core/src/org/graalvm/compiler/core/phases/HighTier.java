@@ -58,6 +58,7 @@ import org.graalvm.compiler.phases.common.inlining.InliningPhase;
 import org.graalvm.compiler.phases.tiers.HighTierContext;
 import org.graalvm.compiler.virtual.phases.ea.EarlyReadEliminationPhase;
 import org.graalvm.compiler.virtual.phases.ea.PartialEscapePhase;
+import org.graalvm.compiler.phases.common.fusion.MethodFusionPhase;
 
 public class HighTier extends PhaseSuite<HighTierContext> {
 
@@ -82,7 +83,7 @@ public class HighTier extends PhaseSuite<HighTierContext> {
         }
 
         if (Options.Inline.getValue(options)) {
-            appendPhase(new InliningPhase(canonicalizer));
+            appendPhase(new MethodFusionPhase(new InliningPhase(canonicalizer)));
             appendPhase(new DeadCodeEliminationPhase(Optional));
         }
 

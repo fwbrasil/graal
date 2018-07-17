@@ -451,6 +451,7 @@ import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
 import jdk.vm.ci.meta.Signature;
 import jdk.vm.ci.meta.TriState;
+import com.sun.xml.internal.ws.util.StringUtils;
 
 /**
  * The {@code GraphBuilder} class parses the bytecode of a method and builds the IR graph.
@@ -2178,6 +2179,13 @@ public class BytecodeParser implements GraphBuilderContext {
         boolean canBeInlined = forceInliningEverything || parsingIntrinsic() || targetMethod.canBeInlined();
         if (!canBeInlined) {
             return null;
+        }
+
+        if (System.getProperty("FuseClass") != null) {
+            String name = "fused" + StringUtils.capitalize(targetMethod.getName());
+            ResolvedJavaMethod fusedMethod = targetMethod.getDeclaringClass().findMethod(name, targetMethod.getSignature());
+            if (fusedMethod != null)
+                return null;
         }
 
         if (forceInliningEverything) {

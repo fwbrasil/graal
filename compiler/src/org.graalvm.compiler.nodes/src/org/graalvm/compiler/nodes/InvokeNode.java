@@ -58,6 +58,7 @@ import static org.graalvm.compiler.nodeinfo.NodeSize.SIZE_2;
 import static org.graalvm.compiler.nodeinfo.NodeSize.SIZE_64;
 import static org.graalvm.compiler.nodeinfo.NodeSize.SIZE_8;
 import static org.graalvm.compiler.nodeinfo.NodeSize.SIZE_UNKNOWN;
+import org.graalvm.compiler.phases.common.fusion.MethodFusionConfig;
 
 /**
  * The {@code InvokeNode} represents all kinds of method calls.
@@ -126,7 +127,7 @@ public final class InvokeNode extends AbstractMemoryCheckpoint implements Invoke
 
     @Override
     public boolean useForInlining() {
-        return useForInlining;
+        return useForInlining && MethodFusionConfig.shouldInline(callTarget.targetMethod);
     }
 
     @Override
