@@ -106,7 +106,7 @@ public class MethodFusionPhase extends BasePhase<HighTierContext> {
         }
 
         private void dump(String format, Object... args) {
-            Debug.dump(Debug.BASIC_LOG_LEVEL, graph, String.format(format, args));
+            graph.getDebug().dump(DebugContext.BASIC_LEVEL, graph, String.format(format, args));
         }
 
         private Set<InvokeNode> leafs(Map<InvokeNode, ResolvedJavaMethod> fusionMap) {
