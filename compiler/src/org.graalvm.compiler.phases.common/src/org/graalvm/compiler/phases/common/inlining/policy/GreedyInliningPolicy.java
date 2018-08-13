@@ -71,6 +71,12 @@ public class GreedyInliningPolicy extends AbstractInliningPolicy {
         final double probability = invocation.probability();
         final double relevance = invocation.relevance();
 
+        if (invocation.toString().contains("fused")) {
+            InliningUtil.traceInlinedMethod(info, inliningDepth, fullyProcessed, "fused method");
+// System.out.println("Forced inlining " + invocation);
+            return InliningPolicy.Decision.YES.withReason(isTracing, "fused method");
+        }
+
         if (InlineEverything.getValue(options)) {
             InliningUtil.traceInlinedMethod(info, inliningDepth, fullyProcessed, "inline everything");
             return InliningPolicy.Decision.YES.withReason(isTracing, "inline everything");
