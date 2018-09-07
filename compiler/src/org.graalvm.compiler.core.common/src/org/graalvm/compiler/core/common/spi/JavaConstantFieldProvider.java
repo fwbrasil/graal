@@ -32,6 +32,7 @@ import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaType;
 import jdk.vm.ci.meta.MetaAccessProvider;
 import jdk.vm.ci.meta.ResolvedJavaField;
+import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
 
 /**
@@ -108,6 +109,20 @@ public abstract class JavaConstantFieldProvider implements ConstantFieldProvider
         }
         if (field.equals(stringHashField)) {
             return true;
+        }
+        if (isScalaLazyVal(field)) {
+            System.out.println(field);
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean isScalaLazyVal(ResolvedJavaField field) {
+        String lazyLoadMethodName = field.getName() + "$lzycompute";
+        ResolvedJavaMethod[] methods = field.getDeclaringClass().getDeclaredMethods();
+        for (ResolvedJavaMethod method : methods) {
+            if (method.getName().equals(lazyLoadMethodName) && method.getParameters().length == 0)
+                return true;
         }
         return false;
     }
