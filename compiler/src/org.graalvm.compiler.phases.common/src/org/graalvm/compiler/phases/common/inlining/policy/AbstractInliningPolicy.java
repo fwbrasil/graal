@@ -103,11 +103,17 @@ public abstract class AbstractInliningPolicy implements InliningPolicy {
         double invokeProbability = 0;
         for (int i = 0; i < info.numberOfMethods(); i++) {
             Inlineable callee = info.inlineableElementAt(i);
-            Iterable<Invoke> invokes = callee.getInvokes();
-            if (invokes.iterator().hasNext()) {
-                for (Invoke invoke : invokes) {
-                    invokeProbability += callee.getProbability(invoke);
-                }
+            invokeProbability += determineInvokeProbability(callee);
+        }
+        return invokeProbability;
+    }
+
+    public static double determineInvokeProbability(Inlineable callee) {
+        double invokeProbability = 0;
+        Iterable<Invoke> invokes = callee.getInvokes();
+        if (invokes.iterator().hasNext()) {
+            for (Invoke invoke : invokes) {
+                invokeProbability += callee.getProbability(invoke);
             }
         }
         return invokeProbability;

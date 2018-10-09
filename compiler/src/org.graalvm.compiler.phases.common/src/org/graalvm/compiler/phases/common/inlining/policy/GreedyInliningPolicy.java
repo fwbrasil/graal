@@ -28,6 +28,7 @@ import static org.graalvm.compiler.core.common.GraalOptions.InlineEverything;
 import static org.graalvm.compiler.core.common.GraalOptions.LimitInlinedInvokes;
 import static org.graalvm.compiler.core.common.GraalOptions.MaximumDesiredSize;
 import static org.graalvm.compiler.core.common.GraalOptions.MaximumInliningSize;
+import static org.graalvm.compiler.core.common.GraalOptions.PartialInlining;
 import static org.graalvm.compiler.core.common.GraalOptions.SmallCompiledLowLevelGraphSize;
 import static org.graalvm.compiler.core.common.GraalOptions.TraceInlining;
 import static org.graalvm.compiler.core.common.GraalOptions.TrivialInliningSize;
@@ -109,7 +110,7 @@ public class GreedyInliningPolicy extends AbstractInliningPolicy {
          * queued in the compilation queue concurrently)
          */
         double invokes = determineInvokeProbability(info);
-        if (LimitInlinedInvokes.getValue(options) > 0 && fullyProcessed && invokes > LimitInlinedInvokes.getValue(options) * inliningBonus) {
+        if (!PartialInlining.getValue(options) && LimitInlinedInvokes.getValue(options) > 0 && fullyProcessed && invokes > LimitInlinedInvokes.getValue(options) * inliningBonus) {
             InliningUtil.traceNotInlinedMethod(info, inliningDepth, "callee invoke probability is too high (invokeP=%f, relevance=%f, probability=%f, bonus=%f, nodes=%d)", invokes, relevance,
                             probability, inliningBonus, nodes);
             return InliningPolicy.Decision.NO.withReason(isTracing, "callee invoke probability is too high (invokeP=%f, relevance=%f, probability=%f, bonus=%f, nodes=%d)", invokes, relevance,

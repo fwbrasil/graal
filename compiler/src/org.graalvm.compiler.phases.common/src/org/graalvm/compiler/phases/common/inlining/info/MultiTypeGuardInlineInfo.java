@@ -24,6 +24,9 @@
  */
 package org.graalvm.compiler.phases.common.inlining.info;
 
+import static org.graalvm.compiler.core.common.GraalOptions.LimitInlinedInvokes;
+import static org.graalvm.compiler.core.common.GraalOptions.PartialInlining;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -57,6 +60,7 @@ import org.graalvm.compiler.nodes.spi.StampProvider;
 import org.graalvm.compiler.nodes.util.GraphUtil;
 import org.graalvm.compiler.phases.common.inlining.InliningUtil;
 import org.graalvm.compiler.phases.common.inlining.info.elem.Inlineable;
+import org.graalvm.compiler.phases.common.inlining.policy.AbstractInliningPolicy;
 import org.graalvm.compiler.phases.util.Providers;
 
 import jdk.vm.ci.meta.ConstantReflectionProvider;
@@ -185,7 +189,21 @@ public class MultiTypeGuardInlineInfo extends AbstractInlineInfo {
     }
 
     private EconomicSet<Node> inlineMultipleMethods(StructuredGraph graph, Providers providers, String reason) {
-        int numberOfMethods = concretes.size();
+        int numberOfMethods = 0;
+        if (PartialInlining.getValue(graph.getOptions()) &&
+                        LimitInlinedInvokes.getValue(graph.getOptions()) > 0) {
+            double accInvokeProbability = 0;
+            double limit = LimitInlinedInvokes.getValue(graph().getOptions());
+            for (int i = 0; i < concretes.size(); i++) {
+                accInvokeProbability += AbstractInliningPolicy.determineInvokeProbability(inlineableElementAt(i));
+                if (accInvokeProbability > limit)
+                    break;
+                numberOfMethods++;
+            }
+        } else {
+            numberOfMethods = concretes.size();
+        }
+
         FixedNode continuation = invoke.next();
 
         // setup merge and phi nodes for results and exceptions
@@ -220,7 +238,7 @@ public class MultiTypeGuardInlineInfo extends AbstractInlineInfo {
 
         // create the successor for an unknown type
         FixedNode unknownTypeSux;
-        if (shouldFallbackToInvoke()) {
+        if (numberOfMethods != concretes.size() || shouldFallbackToInvoke()) {
             unknownTypeSux = createInvocationBlock(graph, invoke, returnMerge, returnValuePhi, exceptionMerge, exceptionObjectPhi, false);
         } else {
             unknownTypeSux = graph.add(new DeoptimizeNode(DeoptimizationAction.InvalidateReprofile, DeoptimizationReason.TypeCheckedInliningViolated));
@@ -276,6 +294,7 @@ public class MultiTypeGuardInlineInfo extends AbstractInlineInfo {
         }
 
         EconomicSet<Node> canonicalizeNodes = EconomicSet.create(Equivalence.DEFAULT);
+
         // do the actual inlining for every invoke
         for (int i = 0; i < numberOfMethods; i++) {
             Invoke invokeForInlining = (Invoke) successors[i].next();
@@ -346,11 +365,13 @@ public class MultiTypeGuardInlineInfo extends AbstractInlineInfo {
 
         graph.getDebug().log("Type switch with %d types", concretes.size());
 
-        ResolvedJavaType[] keys = new ResolvedJavaType[ptypes.size()];
-        double[] keyProbabilities = new double[ptypes.size() + 1];
-        int[] keySuccessors = new int[ptypes.size() + 1];
+        int size = successors.length - 1;
+
+        ResolvedJavaType[] keys = new ResolvedJavaType[size];
+        double[] keyProbabilities = new double[size + 1];
+        int[] keySuccessors = new int[size + 1];
         double totalProbability = notRecordedTypeProbability;
-        for (int i = 0; i < ptypes.size(); i++) {
+        for (int i = 0; i < size; i++) {
             keys[i] = ptypes.get(i).getType();
             keyProbabilities[i] = ptypes.get(i).getProbability();
             totalProbability += keyProbabilities[i];

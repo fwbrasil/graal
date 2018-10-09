@@ -68,6 +68,9 @@ public final class GraalOptions {
     public static final OptionKey<Double> LimitInlinedInvokes = new OptionKey<>(5.0);
 
     @Option(help = "", type = OptionType.Expert)
+    public static final OptionKey<Boolean> PartialInlining = new OptionKey<>(false);
+
+    @Option(help = "", type = OptionType.Expert)
     public static final OptionKey<Boolean> InlineEverything = new OptionKey<>(false);
 
     // escape analysis settings
