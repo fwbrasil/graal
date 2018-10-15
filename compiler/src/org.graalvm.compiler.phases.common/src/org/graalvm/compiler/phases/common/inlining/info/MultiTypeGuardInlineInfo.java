@@ -190,19 +190,20 @@ public class MultiTypeGuardInlineInfo extends AbstractInlineInfo {
 
     private EconomicSet<Node> inlineMultipleMethods(StructuredGraph graph, Providers providers, String reason) {
         int numberOfMethods = 0;
-        if (PartialInlining.getValue(graph.getOptions()) &&
-                        LimitInlinedInvokes.getValue(graph.getOptions()) > 0) {
-            double accInvokeProbability = 0;
-            double limit = LimitInlinedInvokes.getValue(graph().getOptions());
-            for (int i = 0; i < concretes.size(); i++) {
-                accInvokeProbability += AbstractInliningPolicy.determineInvokeProbability(inlineableElementAt(i));
-                if (accInvokeProbability > limit)
-                    break;
-                numberOfMethods++;
-            }
-        } else {
-            numberOfMethods = concretes.size();
-        }
+// if (false && PartialInlining.getValue(graph.getOptions()) &&
+// LimitInlinedInvokes.getValue(graph.getOptions()) > 0) {
+// double accInvokeProbability = 0;
+// double limit = LimitInlinedInvokes.getValue(graph().getOptions());
+// for (int i = 0; i < concretes.size(); i++) {
+// accInvokeProbability +=
+// AbstractInliningPolicy.determineInvokeProbability(inlineableElementAt(i));
+// if (accInvokeProbability > limit)
+// break;
+// numberOfMethods++;
+// }
+// } else {
+        numberOfMethods = concretes.size();
+// }
 
         FixedNode continuation = invoke.next();
 
@@ -296,9 +297,24 @@ public class MultiTypeGuardInlineInfo extends AbstractInlineInfo {
         EconomicSet<Node> canonicalizeNodes = EconomicSet.create(Equivalence.DEFAULT);
 
         // do the actual inlining for every invoke
-        for (int i = 0; i < numberOfMethods; i++) {
-            Invoke invokeForInlining = (Invoke) successors[i].next();
-            canonicalizeNodes.addAll(doInline(i, invokeForInlining, reason));
+
+        if (PartialInlining.getValue(graph.getOptions()) &&
+                        LimitInlinedInvokes.getValue(graph.getOptions()) > 0) {
+            double accInvokeProbability = 0;
+            double limit = LimitInlinedInvokes.getValue(graph().getOptions());
+            for (int i = 0; i < numberOfMethods; i++) {
+                Invoke invokeForInlining = (Invoke) successors[i].next();
+                accInvokeProbability += AbstractInliningPolicy.determineInvokeProbability(inlineableElementAt(i));
+                if (accInvokeProbability <= limit)
+                    canonicalizeNodes.addAll(doInline(i, invokeForInlining, reason));
+                else
+                    invokeForInlining.callTarget().setTargetMethod(concretes.get(i));
+            }
+        } else {
+            for (int i = 0; i < numberOfMethods; i++) {
+                Invoke invokeForInlining = (Invoke) successors[i].next();
+                canonicalizeNodes.addAll(doInline(i, invokeForInlining, reason));
+            }
         }
         if (returnValuePhi != null) {
             canonicalizeNodes.add(returnValuePhi);

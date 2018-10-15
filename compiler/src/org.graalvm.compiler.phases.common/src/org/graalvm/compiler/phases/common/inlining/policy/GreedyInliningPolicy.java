@@ -110,11 +110,20 @@ public class GreedyInliningPolicy extends AbstractInliningPolicy {
          * queued in the compilation queue concurrently)
          */
         double invokes = determineInvokeProbability(info);
-        if (!PartialInlining.getValue(options) && LimitInlinedInvokes.getValue(options) > 0 && fullyProcessed && invokes > LimitInlinedInvokes.getValue(options) * inliningBonus) {
-            InliningUtil.traceNotInlinedMethod(info, inliningDepth, "callee invoke probability is too high (invokeP=%f, relevance=%f, probability=%f, bonus=%f, nodes=%d)", invokes, relevance,
-                            probability, inliningBonus, nodes);
-            return InliningPolicy.Decision.NO.withReason(isTracing, "callee invoke probability is too high (invokeP=%f, relevance=%f, probability=%f, bonus=%f, nodes=%d)", invokes, relevance,
-                            probability, inliningBonus, nodes);
+        if (LimitInlinedInvokes.getValue(options) > 0 && fullyProcessed && invokes > LimitInlinedInvokes.getValue(options) * inliningBonus) {
+            if (PartialInlining.getValue(options) && determineInvokeProbability(info.inlineableElementAt(0)) < LimitInlinedInvokes.getValue(options) * inliningBonus) {
+                InliningUtil.traceInlinedMethod(info, inliningDepth, fullyProcessed, "relevance-based partial inlining (relevance=%f, probability=%f, bonus=%f, nodes=%d <= %f)", relevance,
+                                probability, inliningBonus,
+                                nodes, nodes);
+                return InliningPolicy.Decision.YES.withReason(isTracing, "relevance-based partial inlining (relevance=%f, probability=%f, bonus=%f, nodes=%d <= %f)", relevance, probability,
+                                inliningBonus,
+                                nodes, nodes);
+            } else {
+                InliningUtil.traceNotInlinedMethod(info, inliningDepth, "callee invoke probability is too high (invokeP=%f, relevance=%f, probability=%f, bonus=%f, nodes=%d)", invokes, relevance,
+                                probability, inliningBonus, nodes);
+                return InliningPolicy.Decision.NO.withReason(isTracing, "callee invoke probability is too high (invokeP=%f, relevance=%f, probability=%f, bonus=%f, nodes=%d)", invokes, relevance,
+                                probability, inliningBonus, nodes);
+            }
         }
 
         double maximumNodes = computeMaximumSize(relevance, (int) (MaximumInliningSize.getValue(options) * inliningBonus));
