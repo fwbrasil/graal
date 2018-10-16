@@ -39,6 +39,7 @@ import org.graalvm.compiler.debug.CounterKey;
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.nodes.Invoke;
 import org.graalvm.compiler.nodes.StructuredGraph;
+import org.graalvm.compiler.nodes.CallTargetNode.InvokeKind;
 import org.graalvm.compiler.nodes.spi.Replacements;
 import org.graalvm.compiler.options.OptionValues;
 import org.graalvm.compiler.phases.common.inlining.InliningUtil;
@@ -111,7 +112,8 @@ public class GreedyInliningPolicy extends AbstractInliningPolicy {
          */
         double invokes = determineInvokeProbability(info);
         if (LimitInlinedInvokes.getValue(options) > 0 && fullyProcessed && invokes > LimitInlinedInvokes.getValue(options) * inliningBonus) {
-            if (PartialInlining.getValue(options) && determineInvokeProbability(info.inlineableElementAt(0)) < LimitInlinedInvokes.getValue(options) * inliningBonus) {
+            if (PartialInlining.getValue(options) && info.invoke().getInvokeKind() == InvokeKind.Interface &&
+                            determineInvokeProbability(info.inlineableElementAt(0)) < LimitInlinedInvokes.getValue(options) * inliningBonus) {
                 InliningUtil.traceInlinedMethod(info, inliningDepth, fullyProcessed, "relevance-based partial inlining (relevance=%f, probability=%f, bonus=%f, nodes=%d <= %f)", relevance,
                                 probability, inliningBonus,
                                 nodes, nodes);
