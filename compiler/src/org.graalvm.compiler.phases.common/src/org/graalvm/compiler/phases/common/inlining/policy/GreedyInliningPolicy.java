@@ -24,7 +24,7 @@
  */
 package org.graalvm.compiler.phases.common.inlining.policy;
 
-import static org.graalvm.compiler.core.common.GraalOptions.InlineEverything;
+import static org.graalvm.compiler.core.common.GraalOptions.*;
 import static org.graalvm.compiler.core.common.GraalOptions.LimitInlinedInvokes;
 import static org.graalvm.compiler.core.common.GraalOptions.MaximumDesiredSize;
 import static org.graalvm.compiler.core.common.GraalOptions.MaximumInliningSize;
@@ -38,11 +38,15 @@ import org.graalvm.compiler.debug.CounterKey;
 import org.graalvm.compiler.debug.DebugContext;
 import org.graalvm.compiler.nodes.Invoke;
 import org.graalvm.compiler.nodes.StructuredGraph;
+import org.graalvm.compiler.nodes.CallTargetNode.InvokeKind;
 import org.graalvm.compiler.nodes.spi.Replacements;
 import org.graalvm.compiler.options.OptionValues;
 import org.graalvm.compiler.phases.common.inlining.InliningUtil;
 import org.graalvm.compiler.phases.common.inlining.info.InlineInfo;
+import org.graalvm.compiler.phases.common.inlining.info.elem.Inlineable;
 import org.graalvm.compiler.phases.common.inlining.walker.MethodInvocation;
+
+import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 public class GreedyInliningPolicy extends AbstractInliningPolicy {
 
@@ -100,6 +104,23 @@ public class GreedyInliningPolicy extends AbstractInliningPolicy {
         if (nodes < TrivialInliningSize.getValue(options) * inliningBonus) {
             InliningUtil.traceInlinedMethod(info, inliningDepth, fullyProcessed, "trivial (relevance=%f, probability=%f, bonus=%f, nodes=%d)", relevance, probability, inliningBonus, nodes);
             return InliningPolicy.Decision.YES.withReason(isTracing, "trivial (relevance=%f, probability=%f, bonus=%f, nodes=%d)", relevance, probability, inliningBonus, nodes);
+        }
+
+        if (ForceInlineInterfaceCalls.getValue(options) && info.invoke().getInvokeKind() == InvokeKind.Interface) {
+            if (info.toString().contains("doIt"))
+                System.out.println(1);
+            double lookups = 0;
+            for (int i = 0; i < info.numberOfMethods(); i++) {
+                ResolvedJavaMethod method = info.methodAt(i);
+                int interfaces = method.getDeclaringClass().getInterfaces().length;
+                lookups += interfaces * info.probabilityAt(i);
+            }
+            if (lookups >= info.numberOfMethods()) {
+                if (info.numberOfMethods() > 1)
+                    System.out.println("Force invokeinterface inlining: " + info.invoke() + " lookups: " + lookups + ". numberOfMethods:" + info.numberOfMethods() + ". graph: " + info.graph());
+                InliningUtil.traceInlinedMethod(info, inliningDepth, fullyProcessed, "interface (relevance=%f, probability=%f, bonus=%f, nodes=%d)", relevance, probability, inliningBonus, nodes);
+                return InliningPolicy.Decision.YES.withReason(isTracing, "interface (relevance=%f, probability=%f, bonus=%f, nodes=%d)", relevance, probability, inliningBonus, nodes);
+            }
         }
 
         /*
