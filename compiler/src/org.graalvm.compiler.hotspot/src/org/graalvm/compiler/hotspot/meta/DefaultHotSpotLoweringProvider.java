@@ -41,8 +41,8 @@ import static org.graalvm.compiler.hotspot.replacements.HotSpotReplacementsUtil.
 import static org.graalvm.word.LocationIdentity.any;
 
 import java.lang.ref.Reference;
-import java.lang.reflect.Method;
 import java.util.EnumMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.graalvm.compiler.api.directives.GraalDirectives;
@@ -104,12 +104,11 @@ import org.graalvm.compiler.hotspot.replacements.profiling.ProfileSnippets;
 import org.graalvm.compiler.hotspot.word.KlassPointer;
 import org.graalvm.compiler.nodes.AbstractBeginNode;
 import org.graalvm.compiler.nodes.AbstractDeoptimizeNode;
+import org.graalvm.compiler.nodes.CallTargetNode.InvokeKind;
 import org.graalvm.compiler.nodes.CompressionNode.CompressionOp;
 import org.graalvm.compiler.nodes.ConstantNode;
-import org.graalvm.compiler.nodes.DeoptimizeNode;
 import org.graalvm.compiler.nodes.FixedGuardNode;
 import org.graalvm.compiler.nodes.FixedNode;
-import org.graalvm.compiler.nodes.IfNode;
 import org.graalvm.compiler.nodes.Invoke;
 import org.graalvm.compiler.nodes.LogicNode;
 import org.graalvm.compiler.nodes.LoweredCallTargetNode;
@@ -122,14 +121,10 @@ import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.nodes.UnwindNode;
 import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.calc.AddNode;
-import org.graalvm.compiler.nodes.calc.AndNode;
 import org.graalvm.compiler.nodes.calc.CompareNode;
 import org.graalvm.compiler.nodes.calc.FloatingNode;
 import org.graalvm.compiler.nodes.calc.IntegerDivRemNode;
 import org.graalvm.compiler.nodes.calc.IsNullNode;
-import org.graalvm.compiler.nodes.calc.LeftShiftNode;
-import org.graalvm.compiler.nodes.calc.NotNode;
-import org.graalvm.compiler.nodes.calc.OrNode;
 import org.graalvm.compiler.nodes.calc.RemNode;
 import org.graalvm.compiler.nodes.debug.StringToBytesNode;
 import org.graalvm.compiler.nodes.debug.VerifyHeapNode;
@@ -177,22 +172,18 @@ import org.graalvm.word.LocationIdentity;
 import jdk.vm.ci.code.TargetDescription;
 import jdk.vm.ci.hotspot.HotSpotCallingConventionType;
 import jdk.vm.ci.hotspot.HotSpotConstantReflectionProvider;
-import jdk.vm.ci.hotspot.HotSpotMetaspaceConstant;
 import jdk.vm.ci.hotspot.HotSpotResolvedJavaField;
 import jdk.vm.ci.hotspot.HotSpotResolvedJavaMethod;
-import jdk.vm.ci.hotspot.HotSpotResolvedObjectType;
-import jdk.vm.ci.meta.Constant;
 import jdk.vm.ci.meta.DeoptimizationAction;
 import jdk.vm.ci.meta.DeoptimizationReason;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.JavaType;
 import jdk.vm.ci.meta.JavaTypeProfile;
+import jdk.vm.ci.meta.JavaTypeProfile.ProfiledType;
 import jdk.vm.ci.meta.MetaAccessProvider;
 import jdk.vm.ci.meta.ResolvedJavaField;
-import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
-import jdk.vm.ci.meta.JavaTypeProfile.ProfiledType;
 
 /**
  * HotSpot implementation of {@link LoweringProvider}.
@@ -475,6 +466,8 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
 
     private static AtomicLong common = new AtomicLong(0);
     private static AtomicLong noCommon = new AtomicLong(0);
+    private static AtomicLong notWorth = new AtomicLong(0);
+    private static AtomicInteger maxLength = new AtomicInteger(0);
 
     private void lowerInvoke(Invoke invoke, LoweringTool tool, StructuredGraph graph) {
         if (invoke.callTarget() instanceof MethodCallTargetNode) {
@@ -503,37 +496,48 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
 
                 if (hsMethod.isInVirtualMethodTable(receiverType)) {
                     offset = hsMethod.vtableEntryOffset(receiverType);
-                } else if (InlineCommonOffsetVTableStubs.getValue(graph.getOptions())) {
+                } else if (InlineCommonOffsetVTableStubs.getValue(graph.getOptions()) && invoke.getInvokeKind() == InvokeKind.Interface) {
 
-                    for (int i = 0; i < types.length; i++) {
-                        ProfiledType pt = types[i];
-                        ResolvedJavaType tpe = pt.getType();
-                        HotSpotResolvedJavaMethod concrete = (HotSpotResolvedJavaMethod) tpe.resolveConcreteMethod(callTarget.targetMethod(), invoke.getContextType());
-                        if (concrete.isInVirtualMethodTable(tpe)) {
-                            int current = concrete.vtableEntryOffset(tpe);
-                            if (offset != -1 && offset != current) {
-                                offset = -1;
-                                break;
-                            }
-                            offset = current;
-                        } else {
-                            offset = -1;
-                            break;
+                    double itableEffort = 0d;
+                    for (ProfiledType t : types) {
+                        ResolvedJavaType curr = t.getType();
+                        while (curr != null) {
+                            itableEffort += t.getType().getInterfaces().length * t.getProbability();
+                            curr = curr.getSuperclass();
                         }
                     }
 
-                    System.out.println("offset: " + offset + ". invoke: " + invoke + ". graph: " + graph + ". profile: " + profile);
+                    if (itableEffort >= types.length) {
+                        for (int i = 0; i < types.length; i++) {
+                            ResolvedJavaType tpe = types[i].getType();
+                            HotSpotResolvedJavaMethod concrete = (HotSpotResolvedJavaMethod) tpe.resolveConcreteMethod(callTarget.targetMethod(), invoke.getContextType());
+                            if (concrete.isInVirtualMethodTable(tpe)) {
+                                int current = concrete.vtableEntryOffset(tpe);
+                                if (offset != -1 && offset != current) {
+                                    offset = -1;
+                                    break;
+                                }
+                                offset = current;
+                            } else {
+                                offset = -1;
+                                break;
+                            }
+                        }
+                    } else
+                        notWorth.incrementAndGet();
+
                     if (offset == -1)
                         noCommon.incrementAndGet();
                     else {
+                        System.out.println("offset: " + offset + ". invoke: " + invoke + ". graph: " + graph + ". profile: " + profile);
                         c = true;
+                        if (types.length > maxLength.get())
+                            maxLength.set(types.length);
                         common.incrementAndGet();
                     }
 
                     if ((noCommon.get() + common.get()) % 10 == 0)
-                        System.out.println("Common: " + common.get() + " No common: " + noCommon.get());
-                } else {
-                    offset = -1;
+                        System.out.println("Common: " + common.get() + " No common: " + noCommon.get() + "NotWorth: " + notWorth.get() + " MaxLength: " + maxLength.get());
                 }
 
                 if (offset >= 0) {
@@ -542,12 +546,11 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
                     ValueNode hub = createReadHub(graph, receiver, tool);
 
                     if (c) {
-                        AddressNode h = createOffsetAddress(graph, hub, 0);
                         ConstantNode c0 = ConstantNode.forConstant(hub.stamp(NodeView.DEFAULT), constantReflection.asObjectHub(types[0].getType()), metaAccess, graph);
-                        LogicNode compare = graph.addOrUnique(CompareNode.createCompareNode(CanonicalCondition.EQ, h, c0, constantReflection, NodeView.DEFAULT));
+                        LogicNode compare = graph.addOrUnique(CompareNode.createCompareNode(CanonicalCondition.EQ, hub, c0, constantReflection, NodeView.DEFAULT));
                         for (int i = 1; i < types.length; i++) {
                             ConstantNode typeHub = ConstantNode.forConstant(hub.stamp(NodeView.DEFAULT), constantReflection.asObjectHub(types[i].getType()), metaAccess, graph);
-                            LogicNode curr = graph.addOrUnique(CompareNode.createCompareNode(CanonicalCondition.EQ, h, typeHub, constantReflection, NodeView.DEFAULT));
+                            LogicNode curr = graph.addOrUnique(CompareNode.createCompareNode(CanonicalCondition.EQ, hub, typeHub, constantReflection, NodeView.DEFAULT));
                             compare = graph.addOrUnique(new ShortCircuitOrNode(compare, false, curr, false, types[i - 1].getProbability()));
                         }
                         FixedGuardNode guard = graph.add(new FixedGuardNode(compare, DeoptimizationReason.TypeCheckedInliningViolated, DeoptimizationAction.InvalidateReprofile));
