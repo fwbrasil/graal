@@ -56,15 +56,11 @@ public class AddressLoweringPhase extends Phase {
 
     @Override
     protected void run(StructuredGraph graph) {
-        if (graph.toString().contains("doIt"))
-            System.out.println(2);
         lowering.preProcess(graph);
         for (Node node : graph.getNodes()) {
             AddressNode lowered;
             if (node instanceof OffsetAddressNode) {
                 OffsetAddressNode address = (OffsetAddressNode) node;
-                if (address.toString().contains("23|OffsetAddress") && address.getOffset().toString().contains("Constant(0, i64)"))
-                    System.out.println(3);
                 lowered = lowering.lower(address.getBase(), address.getOffset());
                 lowering.postProcess(lowered);
             } else {
@@ -72,8 +68,6 @@ public class AddressLoweringPhase extends Phase {
             }
             node.replaceAtUsages(lowered);
             GraphUtil.killWithUnusedFloatingInputs(node);
-
-// graph.getDebug().dump(1, graph, "AL " + node);
         }
     }
 }

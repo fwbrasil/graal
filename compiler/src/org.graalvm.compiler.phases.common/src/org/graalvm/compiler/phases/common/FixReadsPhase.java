@@ -502,8 +502,6 @@ public class FixReadsPhase extends BasePhase<LowTierContext> {
 
     @Override
     protected void run(StructuredGraph graph, LowTierContext context) {
-        if (graph.toString().contains("doIt"))
-            System.out.println(22);
         schedulePhase.apply(graph);
         ScheduleResult schedule = graph.getLastSchedule();
         FixReadsClosure fixReadsClosure = new FixReadsClosure();

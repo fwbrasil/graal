@@ -24,12 +24,8 @@
  */
 package org.graalvm.compiler.phases.common.inlining.info;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
 
 import org.graalvm.collections.EconomicSet;
 import org.graalvm.collections.Equivalence;
@@ -63,7 +59,6 @@ import org.graalvm.compiler.phases.common.inlining.InliningUtil;
 import org.graalvm.compiler.phases.common.inlining.info.elem.Inlineable;
 import org.graalvm.compiler.phases.util.Providers;
 
-import jdk.vm.ci.common.JVMCIError;
 import jdk.vm.ci.meta.ConstantReflectionProvider;
 import jdk.vm.ci.meta.DeoptimizationAction;
 import jdk.vm.ci.meta.DeoptimizationReason;
@@ -162,40 +157,11 @@ public class MultiTypeGuardInlineInfo extends AbstractInlineInfo {
         inlineableElements[index] = inlineableElement;
     }
 
-// private static AtomicLong direct = new AtomicLong(0);
-// private static AtomicLong single = new AtomicLong(0);
-// private static AtomicLong multi = new AtomicLong(0);
-
     @Override
     public EconomicSet<Node> inline(Providers providers, String reason) {
         if (hasSingleMethod()) {
             return inlineSingleMethod(graph(), providers.getStampProvider(), providers.getConstantReflection(), reason);
         } else {
-
-// if (invoke.getInvokeKind() == InvokeKind.Interface && concretes.size() > 1) {
-// try {
-// Set<Integer> offsets = new HashSet<>();
-// for (int i = 0; i < concretes.size(); i++) {
-// ResolvedJavaMethod m = concretes.get(i);
-// ProfiledType receiver = ptypes.get(i);
-// Method o = m.getClass().getMethod("vtableEntryOffset", ResolvedJavaType.class);
-// o.setAccessible(true);
-// offsets.add((Integer) o.invoke(m, receiver.getType()));
-// }
-// if (offsets.size() == 1) {
-// if (notRecordedTypeProbability <= 0)
-// direct.incrementAndGet();
-// single.incrementAndGet();
-// } else
-// multi.incrementAndGet();
-//
-// if ((single.get() + multi.get()) % 10 == 0)
-// System.out.println("Direct: " + direct.get() + " Single: " + single.get() + ". Multi: " +
-// multi.get());
-// } catch (Exception e) {
-// }
-// }
-
             return inlineMultipleMethods(graph(), providers, reason);
         }
     }
