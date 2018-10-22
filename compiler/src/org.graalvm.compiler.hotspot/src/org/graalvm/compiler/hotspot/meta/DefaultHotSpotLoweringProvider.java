@@ -25,6 +25,7 @@
 package org.graalvm.compiler.hotspot.meta;
 
 import static org.graalvm.compiler.core.common.GraalOptions.AlwaysInlineVTableStubs;
+import static org.graalvm.compiler.core.common.GraalOptions.InlineCommonOffsetVTableStubs;
 import static org.graalvm.compiler.core.common.GraalOptions.InlineVTableStubs;
 import static org.graalvm.compiler.core.common.GraalOptions.OmitHotExceptionStacktrace;
 import static org.graalvm.compiler.hotspot.meta.HotSpotForeignCallsProviderImpl.OSR_MIGRATION_END;
@@ -40,11 +41,14 @@ import static org.graalvm.compiler.hotspot.replacements.HotSpotReplacementsUtil.
 import static org.graalvm.word.LocationIdentity.any;
 
 import java.lang.ref.Reference;
+import java.lang.reflect.Method;
 import java.util.EnumMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.graalvm.compiler.api.directives.GraalDirectives;
 import org.graalvm.compiler.core.common.CompressEncoding;
 import org.graalvm.compiler.core.common.GraalOptions;
+import org.graalvm.compiler.core.common.calc.CanonicalCondition;
 import org.graalvm.compiler.core.common.spi.ForeignCallDescriptor;
 import org.graalvm.compiler.core.common.spi.ForeignCallsProvider;
 import org.graalvm.compiler.core.common.type.ObjectStamp;
@@ -102,6 +106,8 @@ import org.graalvm.compiler.nodes.AbstractBeginNode;
 import org.graalvm.compiler.nodes.AbstractDeoptimizeNode;
 import org.graalvm.compiler.nodes.CompressionNode.CompressionOp;
 import org.graalvm.compiler.nodes.ConstantNode;
+import org.graalvm.compiler.nodes.DeoptimizeNode;
+import org.graalvm.compiler.nodes.FixedGuardNode;
 import org.graalvm.compiler.nodes.FixedNode;
 import org.graalvm.compiler.nodes.Invoke;
 import org.graalvm.compiler.nodes.LogicNode;
@@ -114,9 +120,12 @@ import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.nodes.UnwindNode;
 import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.calc.AddNode;
+import org.graalvm.compiler.nodes.calc.AndNode;
+import org.graalvm.compiler.nodes.calc.CompareNode;
 import org.graalvm.compiler.nodes.calc.FloatingNode;
 import org.graalvm.compiler.nodes.calc.IntegerDivRemNode;
 import org.graalvm.compiler.nodes.calc.IsNullNode;
+import org.graalvm.compiler.nodes.calc.LeftShiftNode;
 import org.graalvm.compiler.nodes.calc.RemNode;
 import org.graalvm.compiler.nodes.debug.StringToBytesNode;
 import org.graalvm.compiler.nodes.debug.VerifyHeapNode;
@@ -164,14 +173,22 @@ import org.graalvm.word.LocationIdentity;
 import jdk.vm.ci.code.TargetDescription;
 import jdk.vm.ci.hotspot.HotSpotCallingConventionType;
 import jdk.vm.ci.hotspot.HotSpotConstantReflectionProvider;
+import jdk.vm.ci.hotspot.HotSpotMetaspaceConstant;
 import jdk.vm.ci.hotspot.HotSpotResolvedJavaField;
 import jdk.vm.ci.hotspot.HotSpotResolvedJavaMethod;
+import jdk.vm.ci.hotspot.HotSpotResolvedObjectType;
+import jdk.vm.ci.meta.Constant;
+import jdk.vm.ci.meta.DeoptimizationAction;
+import jdk.vm.ci.meta.DeoptimizationReason;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.JavaType;
+import jdk.vm.ci.meta.JavaTypeProfile;
 import jdk.vm.ci.meta.MetaAccessProvider;
 import jdk.vm.ci.meta.ResolvedJavaField;
+import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
+import jdk.vm.ci.meta.JavaTypeProfile.ProfiledType;
 
 /**
  * HotSpot implementation of {@link LoweringProvider}.
@@ -452,8 +469,13 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
         n.replaceAtUsagesAndDelete(read);
     }
 
+    private static AtomicLong common = new AtomicLong(0);
+    private static AtomicLong noCommon = new AtomicLong(0);
+
     private void lowerInvoke(Invoke invoke, LoweringTool tool, StructuredGraph graph) {
         if (invoke.callTarget() instanceof MethodCallTargetNode) {
+            if (invoke.toString().contains("doIt"))
+                System.out.println(2);
             MethodCallTargetNode callTarget = (MethodCallTargetNode) invoke.callTarget();
             NodeInputList<ValueNode> parameters = callTarget.arguments();
             ValueNode receiver = parameters.size() <= 0 ? null : parameters.get(0);
@@ -469,11 +491,78 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
             if (InlineVTableStubs.getValue(options) && callTarget.invokeKind().isIndirect() && (AlwaysInlineVTableStubs.getValue(options) || invoke.isPolymorphic())) {
                 HotSpotResolvedJavaMethod hsMethod = (HotSpotResolvedJavaMethod) callTarget.targetMethod();
                 ResolvedJavaType receiverType = invoke.getReceiverType();
-                if (hsMethod.isInVirtualMethodTable(receiverType)) {
-                    JavaKind wordKind = runtime.getTarget().wordJavaKind;
-                    ValueNode hub = createReadHub(graph, receiver, tool);
 
-                    ReadNode metaspaceMethod = createReadVirtualMethod(graph, hub, hsMethod, receiverType);
+                int offset = -1;
+                long bitset = 0;
+
+                if (hsMethod.isInVirtualMethodTable(receiverType)) {
+                    offset = hsMethod.vtableEntryOffset(receiverType);
+                } else if (InlineCommonOffsetVTableStubs.getValue(graph.getOptions())) {
+
+                    JavaTypeProfile profile = callTarget.getProfile();
+                    if (profile.getNotRecordedProbability() == 0) {
+                        for (ProfiledType pt : profile.getTypes()) {
+                            ResolvedJavaType tpe = pt.getType();
+                            HotSpotResolvedJavaMethod concrete = (HotSpotResolvedJavaMethod) tpe.resolveConcreteMethod(callTarget.targetMethod(), invoke.getContextType());
+                            if (concrete.isInVirtualMethodTable(tpe)) {
+                                int current = concrete.vtableEntryOffset(tpe);
+                                if (offset != -1 && offset != current) {
+                                    offset = -1;
+                                    break;
+                                } else {
+                                    HotSpotResolvedObjectType cls = ((HotSpotMetaspaceConstant) constantReflection.asObjectHub(tpe)).asResolvedJavaType();
+                                    try {
+                                        Method m = cls.getClass().getMethod("getMetaspacePointer");
+                                        m.setAccessible(true);
+                                        long address = (long) m.invoke(cls);
+                                        bitset |= (1L << address);
+                                    } catch (Exception e) {
+                                        throw new RuntimeException(e);
+                                    }
+                                    offset = current;
+                                }
+                            } else {
+                                offset = -1;
+                                break;
+                            }
+                        }
+                    }
+
+                    System.out.println("offset: " + offset + ". invoke: " + invoke + ". graph: " + graph + ". profile: " + profile);
+                    if (offset == -1)
+                        noCommon.incrementAndGet();
+                    else {
+                        common.incrementAndGet();
+                    }
+
+                    if ((noCommon.get() + common.get()) % 10 == 0)
+                        System.out.println("Common: " + common.get() + " No common: " + noCommon.get());
+                } else {
+                    offset = -1;
+                }
+
+                if (offset >= 0) {
+                    JavaKind wordKind = runtime.getTarget().wordJavaKind;
+
+                    if (bitset != 0) {
+                        ValueNode hub = createReadHub(graph, receiver, tool);
+                        ConstantNode one = graph.addOrUnique(ConstantNode.forInt(1));
+                        ConstantNode zero = graph.addOrUnique(ConstantNode.forInt(0));
+                        ConstantNode bitsetNode = graph.unique(ConstantNode.forLong(bitset));
+
+                        AddressNode h = createOffsetAddress(graph, hub, 0);
+                        ReadNode read = graph.addOrUnique(new ReadNode(h, any(), StampFactory.forKind(wordKind),
+                                        BarrierType.NONE));
+                        ValueNode idx = graph.addOrUnique(LeftShiftNode.create(one, read, NodeView.DEFAULT));
+                        ValueNode a = graph.addOrUnique(AndNode.create(bitsetNode, idx, NodeView.DEFAULT));
+                        LogicNode compare = graph.unique(CompareNode.createCompareNode(CanonicalCondition.EQ, a, zero, constantReflection, NodeView.DEFAULT));
+                        FixedGuardNode guard = graph.add(new FixedGuardNode(compare, DeoptimizationReason.TypeCheckedInliningViolated, DeoptimizationAction.InvalidateReprofile));
+                        graph.addBeforeFixed(invoke.asNode(), read);
+                        graph.addBeforeFixed(invoke.asNode(), guard);
+                    }
+
+                    ValueNode hub = createReadHub(graph, receiver, tool);
+                    ReadNode metaspaceMethod = createReadVirtualMethod(graph, hub, offset);
                     // We use LocationNode.ANY_LOCATION for the reads that access the
                     // compiled code entry as HotSpot does not guarantee they are final
                     // values.
@@ -497,6 +586,8 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
                                 callTarget.invokeKind()));
             }
             callTarget.replaceAndDelete(loweredCallTarget);
+
+            graph.getDebug().dump(1, graph, "ooo");
         }
     }
 

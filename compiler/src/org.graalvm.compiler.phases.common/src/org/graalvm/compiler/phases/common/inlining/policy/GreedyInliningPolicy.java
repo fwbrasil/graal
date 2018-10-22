@@ -102,6 +102,9 @@ public class GreedyInliningPolicy extends AbstractInliningPolicy {
             return InliningPolicy.Decision.YES.withReason(isTracing, "trivial (relevance=%f, probability=%f, bonus=%f, nodes=%d)", relevance, probability, inliningBonus, nodes);
         }
 
+        if (info.toString().contains("doIt"))
+            System.out.println(1);
+
         /*
          * TODO (chaeubl): invoked methods that are on important paths but not yet compiled -> will
          * be compiled anyways and it is likely that we are the only caller... might be useful to

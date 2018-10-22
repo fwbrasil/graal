@@ -1097,6 +1097,8 @@ public class Graph {
     void register(Node node) {
         assert !isFrozen();
         assert node.id() == Node.INITIAL_ID;
+        if (node.toString().contains("23|OffsetAddress"))
+            System.out.println(3);
         if (nodes.length == nodesSize) {
             grow();
         }
