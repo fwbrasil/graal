@@ -24,6 +24,7 @@
  */
 package org.graalvm.compiler.phases.common.inlining.info;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -215,13 +216,13 @@ public class MultiTypeGuardInlineInfo extends AbstractInlineInfo {
         // create one separate block for each invoked method
         AbstractBeginNode[] successors = new AbstractBeginNode[numberOfMethods + 1];
         for (int i = 0; i < numberOfMethods; i++) {
-            successors[i] = createInvocationBlock(graph, invoke, returnMerge, returnValuePhi, exceptionMerge, exceptionObjectPhi, true);
+            successors[i] = createInvocationBlock(successors, i, graph, invoke, returnMerge, returnValuePhi, exceptionMerge, exceptionObjectPhi, true);
         }
 
         // create the successor for an unknown type
         FixedNode unknownTypeSux;
         if (shouldFallbackToInvoke()) {
-            unknownTypeSux = createInvocationBlock(graph, invoke, returnMerge, returnValuePhi, exceptionMerge, exceptionObjectPhi, false);
+            unknownTypeSux = createInvocationBlock(successors, -1, graph, invoke, returnMerge, returnValuePhi, exceptionMerge, exceptionObjectPhi, false);
         } else {
             unknownTypeSux = graph.add(new DeoptimizeNode(DeoptimizationAction.InvalidateReprofile, DeoptimizationReason.TypeCheckedInliningViolated));
         }
@@ -277,14 +278,31 @@ public class MultiTypeGuardInlineInfo extends AbstractInlineInfo {
 
         EconomicSet<Node> canonicalizeNodes = EconomicSet.create(Equivalence.DEFAULT);
         // do the actual inlining for every invoke
-        for (int i = 0; i < numberOfMethods; i++) {
-            Invoke invokeForInlining = (Invoke) successors[i].next();
-            canonicalizeNodes.addAll(doInline(i, invokeForInlining, reason));
-        }
+// for (int i = 0; i < numberOfMethods; i++) {
+// Invoke invokeForInlining = (Invoke) successors[i].next();
+// canonicalizeNodes.addAll(doInline(i, invokeForInlining, reason));
+// }
         if (returnValuePhi != null) {
             canonicalizeNodes.add(returnValuePhi);
         }
         return canonicalizeNodes;
+    }
+
+    private int offset(int i) {
+
+        if (i >= concretes.size())
+            return -1;
+
+        ResolvedJavaType t = ptypes.get(i).getType();
+        ResolvedJavaMethod m = concretes.get(i);
+        try {
+            Method rm = m.getClass().getMethod("vtableEntryOffset", ResolvedJavaType.class);
+            rm.setAccessible(true);
+            return (int) rm.invoke(m, t);
+        } catch (Exception e) {
+        }
+
+        return -1;
     }
 
     protected EconomicSet<Node> doInline(int index, Invoke invokeForInlining, String reason) {
@@ -371,9 +389,20 @@ public class MultiTypeGuardInlineInfo extends AbstractInlineInfo {
         return false;
     }
 
-    private static AbstractBeginNode createInvocationBlock(StructuredGraph graph, Invoke invoke, AbstractMergeNode returnMerge, PhiNode returnValuePhi, AbstractMergeNode exceptionMerge,
+    private AbstractBeginNode createInvocationBlock(AbstractBeginNode[] successors, int i, StructuredGraph graph, Invoke invoke, AbstractMergeNode returnMerge, PhiNode returnValuePhi,
+                    AbstractMergeNode exceptionMerge,
                     PhiNode exceptionObjectPhi, boolean useForInlining) {
         Invoke duplicatedInvoke = duplicateInvokeForInlining(graph, invoke, exceptionMerge, exceptionObjectPhi, useForInlining);
+        if (i > 0) {
+            int prevOffset = offset(i - 1);
+            int currOffset = offset(i);
+            if (prevOffset != -1 && prevOffset == currOffset) {
+                AbstractBeginNode prev = successors[i - 1];
+                duplicatedInvoke = (Invoke) prev.next();
+            } else {
+                duplicatedInvoke.callTarget().setTargetMethod(concretes.get(i));
+            }
+        }
         AbstractBeginNode calleeEntryNode = graph.add(new BeginNode());
         calleeEntryNode.setNext(duplicatedInvoke.asNode());
 

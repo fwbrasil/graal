@@ -24,6 +24,7 @@
  */
 package org.graalvm.compiler.nodes.java;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -38,8 +39,12 @@ import org.graalvm.compiler.graph.spi.SimplifierTool;
 import org.graalvm.compiler.nodeinfo.NodeInfo;
 import org.graalvm.compiler.nodes.AbstractBeginNode;
 import org.graalvm.compiler.nodes.ConstantNode;
+import org.graalvm.compiler.nodes.EndNode;
 import org.graalvm.compiler.nodes.FixedWithNextNode;
+import org.graalvm.compiler.nodes.Invoke;
+import org.graalvm.compiler.nodes.InvokeNode;
 import org.graalvm.compiler.nodes.NodeView;
+import org.graalvm.compiler.nodes.ReturnNode;
 import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.extended.LoadHubNode;
 import org.graalvm.compiler.nodes.extended.SwitchNode;
@@ -49,6 +54,7 @@ import org.graalvm.compiler.nodes.util.GraphUtil;
 
 import jdk.vm.ci.meta.Constant;
 import jdk.vm.ci.meta.ConstantReflectionProvider;
+import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
 
 /**
@@ -203,7 +209,45 @@ public final class TypeSwitchNode extends SwitchNode implements LIRLowerable, Si
                 }
             }
         }
+
+// if (graph().toString().contains("doIt"))
+// System.out.println(1);
+//
+// int offset = invokeOffset(0);
+// for (int i = 1; i < successors.size() - 1; i++) {
+// int currOffset = invokeOffset(i);
+// if (offset != -1 && offset == currOffset) {
+// AbstractBeginNode prev = successors.get(i - 1);
+// AbstractBeginNode curr = successors.get(i);
+// if (prev.next() != curr.next())
+// curr.next().replaceAndDelete(prev.next());
+// } else {
+// offset = currOffset;
+// }
+// }
+//
+// graph().getDebug().dump(1, graph(), "after invoke merging");
+
     }
+
+// private int invokeOffset(int i) {
+// AbstractBeginNode s = successors.get(i);
+// if (s.next() instanceof InvokeNode) {
+// InvokeNode n = (InvokeNode) s.next();
+// if (n.next() instanceof EndNode || n.next() instanceof ReturnNode) {
+// ResolvedJavaType t = keys[i];
+// ResolvedJavaMethod m = n.callTarget().targetMethod();
+// Method rm;
+// try {
+// rm = m.getClass().getMethod("vtableEntryOffset", ResolvedJavaType.class);
+// rm.setAccessible(true);
+// return (int) rm.invoke(m, t);
+// } catch (Exception e) {
+// }
+// }
+// }
+// return -1;
+// }
 
     @Override
     public Stamp getValueStampForSuccessor(AbstractBeginNode beginNode) {
