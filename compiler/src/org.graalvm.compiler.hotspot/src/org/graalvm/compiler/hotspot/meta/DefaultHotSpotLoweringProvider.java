@@ -543,8 +543,6 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
 
                     if (c) {
                         AddressNode h = createOffsetAddress(graph, hub, 0);
-// ReadNode read = graph.addOrUnique(new ReadNode(h, any(), StampFactory.forKind(wordKind),
-// BarrierType.NONE));
                         ConstantNode c0 = ConstantNode.forConstant(hub.stamp(NodeView.DEFAULT), constantReflection.asObjectHub(types[0].getType()), metaAccess, graph);
                         LogicNode compare = graph.addOrUnique(CompareNode.createCompareNode(CanonicalCondition.EQ, h, c0, constantReflection, NodeView.DEFAULT));
                         for (int i = 1; i < types.length; i++) {
@@ -553,28 +551,8 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
                             compare = graph.addOrUnique(new ShortCircuitOrNode(compare, false, curr, false, types[i - 1].getProbability()));
                         }
                         FixedGuardNode guard = graph.add(new FixedGuardNode(compare, DeoptimizationReason.TypeCheckedInliningViolated, DeoptimizationAction.InvalidateReprofile));
-// graph.addBeforeFixed(invoke.asNode(), read);
                         graph.addBeforeFixed(invoke.asNode(), guard);
                     }
-
-// if (bitset != 0) {
-// ValueNode hub = createReadHub(graph, receiver, tool);
-// ConstantNode one = graph.addOrUnique(ConstantNode.forInt(1));
-// ConstantNode zero = graph.addOrUnique(ConstantNode.forInt(0));
-// ConstantNode bitsetNode = graph.unique(ConstantNode.forLong(bitset));
-//
-// AddressNode h = createOffsetAddress(graph, hub, 0);
-// ReadNode read = graph.addOrUnique(new ReadNode(h, any(), StampFactory.forKind(wordKind),
-// BarrierType.NONE));
-// ValueNode idx = graph.addOrUnique(LeftShiftNode.create(one, read, NodeView.DEFAULT));
-// ValueNode a = graph.addOrUnique(AndNode.create(bitsetNode, idx, NodeView.DEFAULT));
-// LogicNode compare = graph.unique(CompareNode.createCompareNode(CanonicalCondition.EQ, a, zero,
-// constantReflection, NodeView.DEFAULT));
-// FixedGuardNode guard = graph.add(new FixedGuardNode(compare,
-// DeoptimizationReason.TypeCheckedInliningViolated, DeoptimizationAction.InvalidateReprofile));
-// graph.addBeforeFixed(invoke.asNode(), read);
-// graph.addBeforeFixed(invoke.asNode(), guard);
-// }
 
                     ReadNode metaspaceMethod = createReadVirtualMethod(graph, hub, offset);
                     // We use LocationNode.ANY_LOCATION for the reads that access the
