@@ -109,12 +109,14 @@ import org.graalvm.compiler.nodes.ConstantNode;
 import org.graalvm.compiler.nodes.DeoptimizeNode;
 import org.graalvm.compiler.nodes.FixedGuardNode;
 import org.graalvm.compiler.nodes.FixedNode;
+import org.graalvm.compiler.nodes.IfNode;
 import org.graalvm.compiler.nodes.Invoke;
 import org.graalvm.compiler.nodes.LogicNode;
 import org.graalvm.compiler.nodes.LoweredCallTargetNode;
 import org.graalvm.compiler.nodes.NodeView;
 import org.graalvm.compiler.nodes.ParameterNode;
 import org.graalvm.compiler.nodes.SafepointNode;
+import org.graalvm.compiler.nodes.ShortCircuitOrNode;
 import org.graalvm.compiler.nodes.StartNode;
 import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.nodes.UnwindNode;
@@ -126,6 +128,8 @@ import org.graalvm.compiler.nodes.calc.FloatingNode;
 import org.graalvm.compiler.nodes.calc.IntegerDivRemNode;
 import org.graalvm.compiler.nodes.calc.IsNullNode;
 import org.graalvm.compiler.nodes.calc.LeftShiftNode;
+import org.graalvm.compiler.nodes.calc.NotNode;
+import org.graalvm.compiler.nodes.calc.OrNode;
 import org.graalvm.compiler.nodes.calc.RemNode;
 import org.graalvm.compiler.nodes.debug.StringToBytesNode;
 import org.graalvm.compiler.nodes.debug.VerifyHeapNode;
@@ -494,14 +498,17 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
 
                 int offset = -1;
                 long bitset = 0;
+                JavaTypeProfile profile = callTarget.getProfile();
+                ProfiledType[] types = profile.getTypes();
+                long[] classes = new long[types.length];
 
                 if (hsMethod.isInVirtualMethodTable(receiverType)) {
                     offset = hsMethod.vtableEntryOffset(receiverType);
                 } else if (InlineCommonOffsetVTableStubs.getValue(graph.getOptions())) {
 
-                    JavaTypeProfile profile = callTarget.getProfile();
                     if (profile.getNotRecordedProbability() == 0) {
-                        for (ProfiledType pt : profile.getTypes()) {
+                        for (int i = 0; i < types.length; i++) {
+                            ProfiledType pt = types[i];
                             ResolvedJavaType tpe = pt.getType();
                             HotSpotResolvedJavaMethod concrete = (HotSpotResolvedJavaMethod) tpe.resolveConcreteMethod(callTarget.targetMethod(), invoke.getContextType());
                             if (concrete.isInVirtualMethodTable(tpe)) {
@@ -515,6 +522,7 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
                                         Method m = cls.getClass().getMethod("getMetaspacePointer");
                                         m.setAccessible(true);
                                         long address = (long) m.invoke(cls);
+                                        classes[i] = address;
                                         bitset |= (1L << address);
                                     } catch (Exception e) {
                                         throw new RuntimeException(e);
@@ -544,24 +552,44 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
                 if (offset >= 0) {
                     JavaKind wordKind = runtime.getTarget().wordJavaKind;
 
-                    if (bitset != 0) {
-                        ValueNode hub = createReadHub(graph, receiver, tool);
-                        ConstantNode one = graph.addOrUnique(ConstantNode.forInt(1));
-                        ConstantNode zero = graph.addOrUnique(ConstantNode.forInt(0));
-                        ConstantNode bitsetNode = graph.unique(ConstantNode.forLong(bitset));
+                    ValueNode hub = createReadHub(graph, receiver, tool);
 
+                    if (classes[0] != 0L) {
                         AddressNode h = createOffsetAddress(graph, hub, 0);
-                        ReadNode read = graph.addOrUnique(new ReadNode(h, any(), StampFactory.forKind(wordKind),
-                                        BarrierType.NONE));
-                        ValueNode idx = graph.addOrUnique(LeftShiftNode.create(one, read, NodeView.DEFAULT));
-                        ValueNode a = graph.addOrUnique(AndNode.create(bitsetNode, idx, NodeView.DEFAULT));
-                        LogicNode compare = graph.unique(CompareNode.createCompareNode(CanonicalCondition.EQ, a, zero, constantReflection, NodeView.DEFAULT));
+// ReadNode read = graph.addOrUnique(new ReadNode(h, any(), StampFactory.forKind(wordKind),
+// BarrierType.NONE));
+                        ConstantNode c0 = graph.unique(ConstantNode.forLong(classes[0]));
+                        h.setStamp(c0.stamp(NodeView.DEFAULT));
+                        LogicNode compare = graph.addOrUnique(CompareNode.createCompareNode(CanonicalCondition.EQ, h, c0, constantReflection, NodeView.DEFAULT));
+                        for (int i = 1; i < classes.length; i++) {
+                            ConstantNode forLong = graph.unique(ConstantNode.forLong(classes[i]));
+                            LogicNode curr = graph.addOrUnique(CompareNode.createCompareNode(CanonicalCondition.EQ, h, forLong, constantReflection, NodeView.DEFAULT));
+                            compare = graph.addOrUnique(new ShortCircuitOrNode(compare, false, curr, false, types[i - 1].getProbability()));
+                        }
                         FixedGuardNode guard = graph.add(new FixedGuardNode(compare, DeoptimizationReason.TypeCheckedInliningViolated, DeoptimizationAction.InvalidateReprofile));
-                        graph.addBeforeFixed(invoke.asNode(), read);
+// graph.addBeforeFixed(invoke.asNode(), read);
                         graph.addBeforeFixed(invoke.asNode(), guard);
                     }
 
-                    ValueNode hub = createReadHub(graph, receiver, tool);
+// if (bitset != 0) {
+// ValueNode hub = createReadHub(graph, receiver, tool);
+// ConstantNode one = graph.addOrUnique(ConstantNode.forInt(1));
+// ConstantNode zero = graph.addOrUnique(ConstantNode.forInt(0));
+// ConstantNode bitsetNode = graph.unique(ConstantNode.forLong(bitset));
+//
+// AddressNode h = createOffsetAddress(graph, hub, 0);
+// ReadNode read = graph.addOrUnique(new ReadNode(h, any(), StampFactory.forKind(wordKind),
+// BarrierType.NONE));
+// ValueNode idx = graph.addOrUnique(LeftShiftNode.create(one, read, NodeView.DEFAULT));
+// ValueNode a = graph.addOrUnique(AndNode.create(bitsetNode, idx, NodeView.DEFAULT));
+// LogicNode compare = graph.unique(CompareNode.createCompareNode(CanonicalCondition.EQ, a, zero,
+// constantReflection, NodeView.DEFAULT));
+// FixedGuardNode guard = graph.add(new FixedGuardNode(compare,
+// DeoptimizationReason.TypeCheckedInliningViolated, DeoptimizationAction.InvalidateReprofile));
+// graph.addBeforeFixed(invoke.asNode(), read);
+// graph.addBeforeFixed(invoke.asNode(), guard);
+// }
+
                     ReadNode metaspaceMethod = createReadVirtualMethod(graph, hub, offset);
                     // We use LocationNode.ANY_LOCATION for the reads that access the
                     // compiled code entry as HotSpot does not guarantee they are final
