@@ -197,6 +197,9 @@ public final class GraalOptions {
     public static final OptionKey<Boolean> InlineCommonOffsetVTableStubs = new OptionKey<>(true);
 
     @Option(help = "", type = OptionType.Expert)
+    public static final OptionKey<Integer> InlineCommonOffsetVTableStubsBonus = new OptionKey<>(1);
+
+    @Option(help = "", type = OptionType.Expert)
     public static final OptionKey<Boolean> AlwaysInlineVTableStubs = new OptionKey<>(false);
 
     @Option(help = "", type = OptionType.Debug)

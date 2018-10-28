@@ -25,7 +25,7 @@
 package org.graalvm.compiler.hotspot.meta;
 
 import static org.graalvm.compiler.core.common.GraalOptions.AlwaysInlineVTableStubs;
-import static org.graalvm.compiler.core.common.GraalOptions.InlineCommonOffsetVTableStubs;
+import static org.graalvm.compiler.core.common.GraalOptions.*;
 import static org.graalvm.compiler.core.common.GraalOptions.InlineVTableStubs;
 import static org.graalvm.compiler.core.common.GraalOptions.OmitHotExceptionStacktrace;
 import static org.graalvm.compiler.hotspot.meta.HotSpotForeignCallsProviderImpl.OSR_MIGRATION_END;
@@ -507,7 +507,7 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
                         }
                     }
 
-                    if (itableEffort >= types.length) {
+                    if ((itableEffort * InlineCommonOffsetVTableStubsBonus.getValue(graph.getOptions()) / 100) >= types.length) {
                         for (int i = 0; i < types.length; i++) {
                             ResolvedJavaType tpe = types[i].getType();
                             HotSpotResolvedJavaMethod concrete = (HotSpotResolvedJavaMethod) tpe.resolveConcreteMethod(callTarget.targetMethod(), invoke.getContextType());
@@ -581,8 +581,6 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
                                 callTarget.invokeKind()));
             }
             callTarget.replaceAndDelete(loweredCallTarget);
-
-            graph.getDebug().dump(1, graph, "ooo");
         }
     }
 
