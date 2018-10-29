@@ -39,8 +39,15 @@ import static org.graalvm.compiler.hotspot.replacements.HotSpotReplacementsUtil.
 import static org.graalvm.compiler.hotspot.replacements.HotSpotReplacementsUtil.OBJ_ARRAY_KLASS_ELEMENT_KLASS_LOCATION;
 import static org.graalvm.word.LocationIdentity.any;
 
+import java.io.FileWriter;
+import java.io.IOException;
 import java.lang.ref.Reference;
 import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.graalvm.compiler.api.directives.GraalDirectives;
 import org.graalvm.compiler.core.common.CompressEncoding;
@@ -171,7 +178,9 @@ import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.JavaType;
 import jdk.vm.ci.meta.MetaAccessProvider;
 import jdk.vm.ci.meta.ResolvedJavaField;
+import jdk.vm.ci.meta.ResolvedJavaMethod;
 import jdk.vm.ci.meta.ResolvedJavaType;
+import jdk.vm.ci.meta.JavaTypeProfile.ProfiledType;
 
 /**
  * HotSpot implementation of {@link LoweringProvider}.
@@ -452,6 +461,54 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
         n.replaceAtUsagesAndDelete(read);
     }
 
+    private static final AtomicInteger nextId = new AtomicInteger(0);
+    private static final Map<String, Integer> typeCache = new ConcurrentHashMap<>();
+    private static final FileWriter sqls;
+
+    static {
+        FileWriter r = null;
+        try {
+            r = new FileWriter("inserts.sql");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        sqls = r;
+    }
+
+    private final void interfaces(ResolvedJavaType tpe, int typeId) throws IOException {
+        for (ResolvedJavaType i : tpe.getInterfaces()) {
+            String insert = "INSERT INTO implemented_interface VALUES (" + typeId + ", " + type(i) + ");\n";
+            sqls.write(insert);
+        }
+    }
+
+    private final int type(ResolvedJavaType tpe) throws IOException {
+        if (typeCache.containsKey(tpe.toString()))
+            return typeCache.get(tpe.toString());
+        else {
+            int id = nextId.incrementAndGet();
+            Integer superClass = null;
+            if (tpe.getSuperclass() != null)
+                superClass = type(tpe.getSuperclass());
+            String insert = "INSERT INTO type VALUES (" + id + ", " + tpe.isInterface() + ", '" + tpe.getName() + "', " + superClass + ");\n";
+            sqls.write(insert);
+            interfaces(tpe, id);
+            return id;
+        }
+    }
+
+    private final int method(HotSpotResolvedJavaMethod m, ResolvedJavaType tpe) throws IOException {
+        int id = nextId.incrementAndGet();
+        String signature = m.getName() + m.getSignature().toMethodDescriptor();
+        int typeId = type(tpe);
+        Integer offset = null;
+        if (m.isInVirtualMethodTable(tpe))
+            offset = m.vtableEntryOffset(tpe);
+        String insert = "INSERT INTO method VALUES(" + id + ", '" + signature + "', " + typeId + ", " + offset + ");\n";
+        sqls.write(insert);
+        return id;
+    }
+
     private void lowerInvoke(Invoke invoke, LoweringTool tool, StructuredGraph graph) {
         if (invoke.callTarget() instanceof MethodCallTargetNode) {
             MethodCallTargetNode callTarget = (MethodCallTargetNode) invoke.callTarget();
@@ -487,6 +544,23 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
 
                     graph.addBeforeFixed(invoke.asNode(), metaspaceMethod);
                     graph.addAfterFixed(metaspaceMethod, compiledEntry);
+                } else {
+                    int methodId;
+                    try {
+                        methodId = method(hsMethod, invoke.getReceiverType());
+                        int invokeId = nextId.incrementAndGet();
+                        String s = "INSERT INTO invoke VALUES (" + invokeId + ", " + graph.graphId() + ", " + methodId + ");\n";
+                        sqls.write(s);
+
+                        for (ProfiledType t : callTarget.getProfile().getTypes()) {
+                            int id = nextId.incrementAndGet();
+                            int concreteId = method((HotSpotResolvedJavaMethod) t.getType().resolveConcreteMethod(hsMethod, invoke.getContextType()), t.getType());
+                            String s2 = "INSERT INTO profile VALUES (" + id + ", " + invokeId + ", " + t.getProbability() + ", " + concreteId + ");\n";
+                            sqls.write(s2);
+                        }
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 }
             }
 
