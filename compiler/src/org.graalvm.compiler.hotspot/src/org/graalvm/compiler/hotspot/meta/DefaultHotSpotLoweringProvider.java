@@ -466,7 +466,6 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
 
     private static AtomicLong common = new AtomicLong(0);
     private static AtomicLong noCommon = new AtomicLong(0);
-    private static AtomicLong notWorth = new AtomicLong(0);
     private static AtomicInteger maxLength = new AtomicInteger(0);
 
     private void lowerInvoke(Invoke invoke, LoweringTool tool, StructuredGraph graph) {
@@ -498,33 +497,21 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
                     offset = hsMethod.vtableEntryOffset(receiverType);
                 } else if (InlineCommonOffsetVTableStubs.getValue(graph.getOptions()) && invoke.getInvokeKind() == InvokeKind.Interface) {
 
-                    double itableEffort = 0d;
-                    for (ProfiledType t : types) {
-                        ResolvedJavaType curr = t.getType();
-                        while (curr != null) {
-                            itableEffort += t.getType().getInterfaces().length * t.getProbability();
-                            curr = curr.getSuperclass();
-                        }
-                    }
-
-                    if ((itableEffort * InlineCommonOffsetVTableStubsBonus.getValue(graph.getOptions()) / 100) >= types.length) {
-                        for (int i = 0; i < types.length; i++) {
-                            ResolvedJavaType tpe = types[i].getType();
-                            HotSpotResolvedJavaMethod concrete = (HotSpotResolvedJavaMethod) tpe.resolveConcreteMethod(callTarget.targetMethod(), invoke.getContextType());
-                            if (concrete.isInVirtualMethodTable(tpe)) {
-                                int current = concrete.vtableEntryOffset(tpe);
-                                if (offset != -1 && offset != current) {
-                                    offset = -1;
-                                    break;
-                                }
-                                offset = current;
-                            } else {
+                    for (int i = 0; i < types.length; i++) {
+                        ResolvedJavaType tpe = types[i].getType();
+                        HotSpotResolvedJavaMethod concrete = (HotSpotResolvedJavaMethod) tpe.resolveConcreteMethod(callTarget.targetMethod(), invoke.getContextType());
+                        if (concrete.isInVirtualMethodTable(tpe)) {
+                            int current = concrete.vtableEntryOffset(tpe);
+                            if (offset != -1 && offset != current) {
                                 offset = -1;
                                 break;
                             }
+                            offset = current;
+                        } else {
+                            offset = -1;
+                            break;
                         }
-                    } else
-                        notWorth.incrementAndGet();
+                    }
 
                     if (offset == -1)
                         noCommon.incrementAndGet();
@@ -537,7 +524,7 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
                     }
 
                     if ((noCommon.get() + common.get()) % 10 == 0)
-                        System.out.println("Common: " + common.get() + " No common: " + noCommon.get() + "NotWorth: " + notWorth.get() + " MaxLength: " + maxLength.get());
+                        System.out.println("Common: " + common.get() + " No common: " + noCommon.get() + " MaxLength: " + maxLength.get());
                 }
 
                 if (offset >= 0) {
