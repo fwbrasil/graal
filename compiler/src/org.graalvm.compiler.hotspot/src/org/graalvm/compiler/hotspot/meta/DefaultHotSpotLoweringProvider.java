@@ -525,7 +525,7 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
                             throw new RuntimeException(e);
                         }
 
-                        ConstantNode superClassHub = ConstantNode.forLong(superClassPointer);
+                        ConstantNode superClassHub = graph.unique(ConstantNode.forLong(superClassPointer));
 
                         LogicNode check = CompareNode.createCompareNode(graph, CanonicalCondition.EQ, superClassEntry, superClassHub, constantReflection, NodeView.DEFAULT);
                         FixedGuardNode guard = graph.add(new FixedGuardNode(check, DeoptimizationReason.TypeCheckedInliningViolated, DeoptimizationAction.InvalidateReprofile));
@@ -544,7 +544,7 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
                         System.out.println("ok " + ok + " nok " + nok);
                 }
 
-                if (offset > 0) {
+                if (offset >= 0) {
 
                     if (hub == null)
                         hub = createReadHub(graph, receiver, tool);
