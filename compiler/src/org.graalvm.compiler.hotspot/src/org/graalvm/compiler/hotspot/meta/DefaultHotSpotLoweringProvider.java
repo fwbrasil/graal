@@ -41,6 +41,7 @@ import static org.graalvm.word.LocationIdentity.any;
 
 import java.lang.ref.Reference;
 import java.util.EnumMap;
+import java.util.Optional;
 
 import org.graalvm.compiler.api.directives.GraalDirectives;
 import org.graalvm.compiler.core.common.CompressEncoding;
@@ -58,6 +59,7 @@ import org.graalvm.compiler.graph.Node;
 import org.graalvm.compiler.graph.NodeInputList;
 import org.graalvm.compiler.hotspot.GraalHotSpotVMConfig;
 import org.graalvm.compiler.hotspot.HotSpotGraalRuntimeProvider;
+import org.graalvm.compiler.hotspot.meta.invoke.MethodOffsetStrategy;
 import org.graalvm.compiler.hotspot.nodes.BeginLockScopeNode;
 import org.graalvm.compiler.hotspot.nodes.G1ArrayRangePostWriteBarrier;
 import org.graalvm.compiler.hotspot.nodes.G1ArrayRangePreWriteBarrier;
@@ -146,6 +148,7 @@ import org.graalvm.compiler.nodes.java.NewArrayNode;
 import org.graalvm.compiler.nodes.java.NewInstanceNode;
 import org.graalvm.compiler.nodes.java.NewMultiArrayNode;
 import org.graalvm.compiler.nodes.java.RawMonitorEnterNode;
+import org.graalvm.compiler.nodes.java.TypeSwitchNode;
 import org.graalvm.compiler.nodes.memory.FloatingReadNode;
 import org.graalvm.compiler.nodes.memory.HeapAccess.BarrierType;
 import org.graalvm.compiler.nodes.memory.ReadNode;
@@ -394,10 +397,16 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
                 }
             } else if (n instanceof ProfileNode) {
                 profileSnippets.lower((ProfileNode) n, tool);
+            } else if (n instanceof TypeSwitchNode) {
+                lowerTypeSwitch((TypeSwitchNode) n);
             } else {
                 super.lower(n, tool);
             }
         }
+    }
+
+    private void lowerTypeSwitch(TypeSwitchNode n) {
+
     }
 
     private static void lowerComputeObjectAddressNode(ComputeObjectAddressNode n) {
@@ -464,6 +473,7 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
     }
 
     private void lowerInvoke(Invoke invoke, LoweringTool tool, StructuredGraph graph) {
+
         if (invoke.callTarget() instanceof MethodCallTargetNode) {
             MethodCallTargetNode callTarget = (MethodCallTargetNode) invoke.callTarget();
             NodeInputList<ValueNode> parameters = callTarget.arguments();
@@ -478,17 +488,18 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
             LoweredCallTargetNode loweredCallTarget = null;
             OptionValues options = graph.getOptions();
             if (InlineVTableStubs.getValue(options) && callTarget.invokeKind().isIndirect() && (AlwaysInlineVTableStubs.getValue(options) || invoke.isPolymorphic())) {
-                HotSpotResolvedJavaMethod hsMethod = (HotSpotResolvedJavaMethod) callTarget.targetMethod();
-                ResolvedJavaType receiverType = invoke.getReceiverType();
-                if (hsMethod.isInVirtualMethodTable(receiverType)) {
-                    JavaKind wordKind = runtime.getTarget().wordJavaKind;
-                    ValueNode hub = createReadHub(graph, receiver, tool);
+                GraalHotSpotVMConfig config = runtime.getVMConfig();
 
-                    ReadNode metaspaceMethod = createReadVirtualMethod(graph, hub, hsMethod, receiverType);
+                JavaKind wordKind = runtime.getTarget().wordJavaKind;
+                ValueNode hub = createReadHub(graph, receiver, tool);
+                Optional<ValueNode> offset = MethodOffsetStrategy.resolve(graph, hub, invoke, config, target, constantReflection, tool, receiver, metaAccess);
+
+                if (offset.isPresent()) {
+                    ReadNode metaspaceMethod = createReadVirtualMethod(graph, hub, offset.get());
                     // We use LocationNode.ANY_LOCATION for the reads that access the
                     // compiled code entry as HotSpot does not guarantee they are final
                     // values.
-                    int methodCompiledEntryOffset = runtime.getVMConfig().methodCompiledEntryOffset;
+                    int methodCompiledEntryOffset = config.methodCompiledEntryOffset;
                     AddressNode address = createOffsetAddress(graph, metaspaceMethod, methodCompiledEntryOffset);
                     ReadNode compiledEntry = graph.add(new ReadNode(address, any(), StampFactory.forKind(wordKind), BarrierType.NONE));
 
@@ -725,6 +736,15 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
 
     private ReadNode createReadVirtualMethod(StructuredGraph graph, ValueNode hub, int vtableEntryOffset) {
         assert vtableEntryOffset > 0;
+        // We use LocationNode.ANY_LOCATION for the reads that access the vtable
+        // entry as HotSpot does not guarantee that this is a final value.
+        Stamp methodStamp = MethodPointerStamp.methodNonNull();
+        AddressNode address = createOffsetAddress(graph, hub, vtableEntryOffset);
+        ReadNode metaspaceMethod = graph.add(new ReadNode(address, any(), methodStamp, BarrierType.NONE));
+        return metaspaceMethod;
+    }
+
+    private ReadNode createReadVirtualMethod(StructuredGraph graph, ValueNode hub, ValueNode vtableEntryOffset) {
         // We use LocationNode.ANY_LOCATION for the reads that access the vtable
         // entry as HotSpot does not guarantee that this is a final value.
         Stamp methodStamp = MethodPointerStamp.methodNonNull();

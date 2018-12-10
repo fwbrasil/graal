@@ -70,6 +70,9 @@ public final class GraalOptions {
     @Option(help = "", type = OptionType.Expert)
     public static final OptionKey<Boolean> InlineEverything = new OptionKey<>(false);
 
+    @Option(help = "", type = OptionType.Expert)
+    public static final OptionKey<String> MethodOffsetStrategies = new OptionKey<>(null);
+
     // escape analysis settings
     @Option(help = "", type = OptionType.Debug)
     public static final OptionKey<Boolean> PartialEscapeAnalysis = new OptionKey<>(true);
@@ -192,6 +195,9 @@ public final class GraalOptions {
 
     @Option(help = "", type = OptionType.Expert)
     public static final OptionKey<Boolean> InlineVTableStubs = new OptionKey<>(true);
+
+    @Option(help = "", type = OptionType.Expert)
+    public static final OptionKey<Boolean> InlineITableStubs = new OptionKey<>(true);
 
     @Option(help = "", type = OptionType.Expert)
     public static final OptionKey<Boolean> AlwaysInlineVTableStubs = new OptionKey<>(false);

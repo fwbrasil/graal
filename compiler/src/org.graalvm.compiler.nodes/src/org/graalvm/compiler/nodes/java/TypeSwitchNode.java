@@ -24,8 +24,12 @@
  */
 package org.graalvm.compiler.nodes.java;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import org.graalvm.compiler.core.common.type.AbstractPointerStamp;
 import org.graalvm.compiler.core.common.type.ObjectStamp;
@@ -69,6 +73,19 @@ public final class TypeSwitchNode extends SwitchNode implements LIRLowerable, Si
         this.keys = keys;
         assert value.stamp(NodeView.DEFAULT) instanceof AbstractPointerStamp;
         assert assertKeys();
+
+// List<Long> pointers = Arrays.stream(keys).map(type -> {
+// try {
+// Method m = type.getClass().getDeclaredMethod("getMetaspacePointer");
+// m.setAccessible(true);
+// return (long) m.invoke(type);
+// } catch (NoSuchMethodException | SecurityException | IllegalAccessException |
+// IllegalArgumentException | InvocationTargetException e) {
+// throw new RuntimeException(e);
+// }
+// }).collect(Collectors.toList());
+//
+// System.out.println(pointers);
 
         hubs = new Constant[keys.length];
         for (int i = 0; i < hubs.length; i++) {
@@ -121,6 +138,8 @@ public final class TypeSwitchNode extends SwitchNode implements LIRLowerable, Si
 
     @Override
     public void generate(NodeLIRBuilderTool gen) {
+        if (graph().toString().contains("doItOuter"))
+            System.out.println(1);
         gen.emitSwitch(this);
     }
 
