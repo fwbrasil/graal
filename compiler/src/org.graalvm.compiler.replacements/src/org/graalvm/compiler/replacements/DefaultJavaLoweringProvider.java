@@ -391,6 +391,10 @@ public abstract class DefaultJavaLoweringProvider implements LoweringProvider {
         return graph.unique(new OffsetAddressNode(object, o));
     }
 
+    protected AddressNode createOffsetAddress(StructuredGraph graph, ValueNode object, ValueNode offset) {
+        return graph.unique(new OffsetAddressNode(object, offset));
+    }
+
     protected AddressNode createFieldAddress(StructuredGraph graph, ValueNode object, ResolvedJavaField field) {
         int offset = fieldOffset(field);
         if (offset >= 0) {
