@@ -1,11 +1,13 @@
 package org.graalvm.compiler.hotspot.meta.invoke;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.graalvm.compiler.core.common.GraalOptions;
 import org.graalvm.compiler.hotspot.GraalHotSpotVMConfig;
 import org.graalvm.compiler.nodeinfo.NodeCycles;
 import org.graalvm.compiler.nodes.Invoke;
@@ -66,22 +68,41 @@ public interface MethodOffsetStrategy {
 
     public Optional<Evaluation> evaluate(Info info);
 
-    static final List<MethodOffsetStrategy> defaultStrategies = Arrays.asList(new FixedOffsetStrategy(), new SuperclassStrategy(), new CachingStrategy(), new FallbackStrategy());
-
     public static Optional<ValueNode> resolve(StructuredGraph graph, ValueNode hub, Invoke invoke, GraalHotSpotVMConfig config, TargetDescription target,
                     HotSpotConstantReflectionProvider constantReflection, LoweringTool loweringTool, ValueNode receiver, MetaAccessProvider metaAccess) {
 
         Info info = new Info(graph, hub, invoke, config, target, constantReflection, loweringTool, receiver, metaAccess);
-        List<Evaluation> strategies = defaultStrategies.stream().flatMap(s -> s.evaluate(info).map(Stream::of).orElseGet(Stream::empty)).sorted((a, b) -> a.cycles().value - b.cycles().value).collect(
+
+        String strategiesOption = GraalOptions.MethodOffsetStrategies.getValue(graph.getOptions());
+
+        if (strategiesOption == null)
+            throw new NullPointerException("MethodOffsetStrategies option can't be null");
+
+        List<MethodOffsetStrategy> strategies = new ArrayList<>();
+        for (String str : strategiesOption.split(",")) {
+            if ("FixedOffset".equals(str))
+                strategies.add(new FixedOffsetStrategy());
+            else if ("Superclass".equals(str))
+                strategies.add(new SuperclassStrategy());
+            else if ("Caching".equals(str))
+                strategies.add(new CachingStrategy());
+            else if ("Fallback".equals(str))
+                strategies.add(new FallbackStrategy());
+            else if (!str.isEmpty())
+                throw new IllegalStateException("Invalid method offset strategy: " + str);
+        }
+
+        List<Evaluation> evaluations = strategies.stream().flatMap(s -> s.evaluate(info).map(Stream::of).orElseGet(Stream::empty)).sorted((a, b) -> a.cycles().value - b.cycles().value).collect(
                         Collectors.toList());
 
-        if (strategies.isEmpty()) {
+        if (evaluations.isEmpty()) {
             return Optional.empty();
         } else {
-            if (!strategies.get(0).getClass().getName().contains("Fixed") &&
+            Evaluation evaluation = evaluations.get(0);
+            if (!evaluation.getClass().getName().contains("Fixed") &&
                             !strategies.get(0).getClass().getName().contains("Fallback"))
-                System.out.println("" + graph.method().getName() + ": " + invoke + " => " + strategies);
-            Optional<ValueNode> value = strategies.get(0).apply();
+                System.out.println("" + graph.method().getName() + ": " + invoke + " => " + evaluations);
+            Optional<ValueNode> value = evaluation.apply();
             return value;
         }
     }

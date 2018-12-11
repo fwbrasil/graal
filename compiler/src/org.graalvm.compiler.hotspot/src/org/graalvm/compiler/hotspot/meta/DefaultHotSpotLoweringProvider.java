@@ -735,27 +735,6 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
         return metaspaceMethod;
     }
 
-    public static ValueNode createReadHub(StructuredGraph graph, ValueNode object, LoweringTool tool, int hubOffset, GraalHotSpotVMConfig vmConfig, JavaKind wordJavaKind) {
-//        if (tool.getLoweringStage() != LoweringTool.StandardLoweringStage.LOW_TIER) {
-//            return graph.unique(new LoadHubNode(tool.getStampProvider(), object));
-//        }
-        assert !object.isConstant() || object.isNullConstant();
-
-        KlassPointerStamp hubStamp = KlassPointerStamp.klassNonNull();
-        if (vmConfig.useCompressedClassPointers) {
-            hubStamp = hubStamp.compressed(vmConfig.getKlassEncoding());
-        }
-
-        AddressNode address = createOffsetAddress(graph, object, hubOffset, wordJavaKind);
-        LocationIdentity hubLocation = vmConfig.useCompressedClassPointers ? COMPRESSED_HUB_LOCATION : HUB_LOCATION;
-        FloatingReadNode memoryRead = graph.unique(new FloatingReadNode(address, hubLocation, null, hubStamp, null, BarrierType.NONE));
-        if (vmConfig.useCompressedClassPointers) {
-            return HotSpotCompressionNode.uncompress(memoryRead, vmConfig.getKlassEncoding());
-        } else {
-            return memoryRead;
-        }
-    }
-
     @Override
     protected ValueNode createReadHub(StructuredGraph graph, ValueNode object, LoweringTool tool) {
         if (tool.getLoweringStage() != LoweringTool.StandardLoweringStage.LOW_TIER) {
