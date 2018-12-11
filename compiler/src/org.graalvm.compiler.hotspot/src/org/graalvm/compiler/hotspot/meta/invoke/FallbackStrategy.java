@@ -15,10 +15,10 @@ public class FallbackStrategy implements MethodOffsetStrategy {
         return Optional.of(new Evaluation() {
 
             @Override
-            public NodeCycles cycles() {
+            public int effort() {
                 ResolvedJavaType type = info.callTarget.targetMethod().getDeclaringClass();
                 if (!type.isInterface()) {
-                    return NodeCycles.CYCLES_0;
+                    return 0;
                 } else {
                     ProfiledType[] ptypes = info.callTarget.getProfile().getTypes();
                     double cycles = 0D;
@@ -31,7 +31,7 @@ public class FallbackStrategy implements MethodOffsetStrategy {
                         assert interfaces[i] == type;
                         cycles += ptype.getProbability() * (i + 1) * 2;
                     }
-                    return NodeCycles.compute((int) cycles + 4);
+                    return (int) cycles + 2;
                 }
             }
 

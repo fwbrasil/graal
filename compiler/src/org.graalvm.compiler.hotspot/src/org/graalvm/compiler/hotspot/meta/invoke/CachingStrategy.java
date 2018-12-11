@@ -73,8 +73,8 @@ public class CachingStrategy implements MethodOffsetStrategy {
         return Optional.of(new Evaluation() {
 
             @Override
-            public NodeCycles cycles() {
-                return NodeCycles.compute(keys.length * 2);
+            public int effort() {
+                return keys.length * 2;
             }
 
             @Override

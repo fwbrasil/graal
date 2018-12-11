@@ -43,8 +43,8 @@ public class SuperclassStrategy implements MethodOffsetStrategy {
                 return set.iterator().next().filter(m -> m.isInVirtualMethodTable(m.getDeclaringClass())).map(superClassMethod -> new Evaluation() {
 
                     @Override
-                    public NodeCycles cycles() {
-                        return NodeCycles.CYCLES_2;
+                    public int effort() {
+                        return 2;
                     }
 
                     @Override

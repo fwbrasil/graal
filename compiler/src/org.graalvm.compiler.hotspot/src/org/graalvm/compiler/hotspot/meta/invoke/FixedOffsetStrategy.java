@@ -14,8 +14,8 @@ public class FixedOffsetStrategy implements MethodOffsetStrategy {
             return Optional.of(new Evaluation() {
 
                 @Override
-                public NodeCycles cycles() {
-                    return NodeCycles.CYCLES_0;
+                public int effort() {
+                    return 0;
                 }
 
                 @Override

@@ -9,7 +9,6 @@ import java.util.stream.Stream;
 
 import org.graalvm.compiler.core.common.GraalOptions;
 import org.graalvm.compiler.hotspot.GraalHotSpotVMConfig;
-import org.graalvm.compiler.nodeinfo.NodeCycles;
 import org.graalvm.compiler.nodes.Invoke;
 import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.nodes.ValueNode;
@@ -56,13 +55,13 @@ public interface MethodOffsetStrategy {
     }
 
     public static abstract class Evaluation {
-        public abstract NodeCycles cycles();
+        public abstract int effort();
 
         public abstract Optional<ValueNode> apply();
 
         @Override
         public String toString() {
-            return "(" + cycles().value + ") " + this.getClass().getName().replace("org.graalvm.compiler.hotspot.meta.invoke.", "");
+            return "(" + effort() + ") " + this.getClass().getName().replace("org.graalvm.compiler.hotspot.meta.invoke.", "");
         }
     }
 
@@ -92,15 +91,15 @@ public interface MethodOffsetStrategy {
                 throw new IllegalStateException("Invalid method offset strategy: " + str);
         }
 
-        List<Evaluation> evaluations = strategies.stream().flatMap(s -> s.evaluate(info).map(Stream::of).orElseGet(Stream::empty)).sorted((a, b) -> a.cycles().value - b.cycles().value).collect(
+        List<Evaluation> evaluations = strategies.stream().flatMap(s -> s.evaluate(info).map(Stream::of).orElseGet(Stream::empty)).sorted((a, b) -> a.effort() - b.effort()).collect(
                         Collectors.toList());
 
         if (evaluations.isEmpty()) {
             return Optional.empty();
         } else {
             Evaluation evaluation = evaluations.get(0);
-            if (!evaluation.getClass().getName().contains("Fixed") &&
-                            !strategies.get(0).getClass().getName().contains("Fallback"))
+            if (!evaluation.toString().contains("Fixed") &&
+                            !evaluation.toString().contains("Fallback"))
                 System.out.println("" + graph.method().getName() + ": " + invoke + " => " + evaluations);
             Optional<ValueNode> value = evaluation.apply();
             return value;
