@@ -78,14 +78,10 @@ public interface MethodOffsetStrategy {
         if (strategies.isEmpty()) {
             return Optional.empty();
         } else {
-            if (strategies.get(0).getClass().getName().contains("Superclass"))
+            if (!strategies.get(0).getClass().getName().contains("Fixed") &&
+                            !strategies.get(0).getClass().getName().contains("Fallback"))
                 System.out.println("" + graph.method().getName() + ": " + invoke + " => " + strategies);
             Optional<ValueNode> value = strategies.get(0).apply();
-// value.ifPresent(v -> {
-// if (!strategies.get(0).getClass().getName().contains("Fixed") &&
-// !strategies.get(0).getClass().getName().contains("Fallback"))
-// graph.getDebug().forceDump(graph, strategies.get(0).toString() + " " + v);
-// });
             return value;
         }
     }
