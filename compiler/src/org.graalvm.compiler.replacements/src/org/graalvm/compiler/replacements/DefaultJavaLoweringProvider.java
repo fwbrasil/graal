@@ -386,9 +386,13 @@ public abstract class DefaultJavaLoweringProvider implements LoweringProvider {
         GraphUtil.removeFixedWithUnusedInputs(n);
     }
 
-    protected AddressNode createOffsetAddress(StructuredGraph graph, ValueNode object, long offset) {
-        ValueNode o = ConstantNode.forIntegerKind(target.wordJavaKind, offset, graph);
+    public static AddressNode createOffsetAddress(StructuredGraph graph, ValueNode object, long offset, JavaKind wordJavaKind) {
+        ValueNode o = ConstantNode.forIntegerKind(wordJavaKind, offset, graph);
         return graph.unique(new OffsetAddressNode(object, o));
+    }
+
+    protected AddressNode createOffsetAddress(StructuredGraph graph, ValueNode object, long offset) {
+        return createOffsetAddress(graph, object, offset, target.wordJavaKind);
     }
 
     protected AddressNode createOffsetAddress(StructuredGraph graph, ValueNode object, ValueNode offset) {

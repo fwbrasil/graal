@@ -6,7 +6,7 @@ import org.graalvm.compiler.nodeinfo.NodeCycles;
 import org.graalvm.compiler.nodes.ConstantNode;
 import org.graalvm.compiler.nodes.ValueNode;
 
-public class FixedVTableOffsetStrategy implements MethodOffsetStrategy {
+public class FixedOffsetStrategy implements MethodOffsetStrategy {
 
     @Override
     public Optional<Evaluation> evaluate(Info info) {
@@ -19,8 +19,8 @@ public class FixedVTableOffsetStrategy implements MethodOffsetStrategy {
                 }
 
                 @Override
-                public ValueNode apply() {
-                    return ConstantNode.forIntegerKind(info.target.wordJavaKind, info.hsMethod.vtableEntryOffset(info.receiverType), info.graph);
+                public Optional<ValueNode> apply() {
+                    return Optional.of(ConstantNode.forIntegerKind(info.target.wordJavaKind, info.hsMethod.vtableEntryOffset(info.receiverType), info.graph));
                 }
             });
         } else {

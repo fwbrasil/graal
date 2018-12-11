@@ -474,7 +474,7 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
 
                 JavaKind wordKind = runtime.getTarget().wordJavaKind;
                 ValueNode hub = createReadHub(graph, receiver, tool);
-                Optional<ValueNode> offset = MethodOffsetStrategy.resolve(graph, hub, invoke, config, target, constantReflection);
+                Optional<ValueNode> offset = MethodOffsetStrategy.resolve(graph, hub, invoke, config, target, constantReflection, tool, receiver, metaAccess);
 
                 if (offset.isPresent()) {
                     ReadNode metaspaceMethod = createReadVirtualMethod(graph, hub, offset.get());
@@ -733,6 +733,27 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
         AddressNode address = createOffsetAddress(graph, hub, vtableEntryOffset);
         ReadNode metaspaceMethod = graph.add(new ReadNode(address, any(), methodStamp, BarrierType.NONE));
         return metaspaceMethod;
+    }
+
+    public static ValueNode createReadHub(StructuredGraph graph, ValueNode object, LoweringTool tool, int hubOffset, GraalHotSpotVMConfig vmConfig, JavaKind wordJavaKind) {
+//        if (tool.getLoweringStage() != LoweringTool.StandardLoweringStage.LOW_TIER) {
+//            return graph.unique(new LoadHubNode(tool.getStampProvider(), object));
+//        }
+        assert !object.isConstant() || object.isNullConstant();
+
+        KlassPointerStamp hubStamp = KlassPointerStamp.klassNonNull();
+        if (vmConfig.useCompressedClassPointers) {
+            hubStamp = hubStamp.compressed(vmConfig.getKlassEncoding());
+        }
+
+        AddressNode address = createOffsetAddress(graph, object, hubOffset, wordJavaKind);
+        LocationIdentity hubLocation = vmConfig.useCompressedClassPointers ? COMPRESSED_HUB_LOCATION : HUB_LOCATION;
+        FloatingReadNode memoryRead = graph.unique(new FloatingReadNode(address, hubLocation, null, hubStamp, null, BarrierType.NONE));
+        if (vmConfig.useCompressedClassPointers) {
+            return HotSpotCompressionNode.uncompress(memoryRead, vmConfig.getKlassEncoding());
+        } else {
+            return memoryRead;
+        }
     }
 
     @Override

@@ -26,12 +26,10 @@ import jdk.vm.ci.meta.JavaTypeProfile;
 import jdk.vm.ci.meta.JavaTypeProfile.ProfiledType;
 import jdk.vm.ci.meta.ResolvedJavaType;
 
-public class CachingOffsetStrategy implements MethodOffsetStrategy {
+public class CachingStrategy implements MethodOffsetStrategy {
 
     @Override
     public Optional<Evaluation> evaluate(Info info) {
-        if (!info.graph.toString().contains("doItOuter"))
-            return Optional.empty();
         JavaTypeProfile profile = info.callTarget.getProfile();
         double notRecordedProbability = profile.getNotRecordedProbability();
         ProfiledType[] ptypes = profile.getTypes();
@@ -40,7 +38,8 @@ public class CachingOffsetStrategy implements MethodOffsetStrategy {
         for (ProfiledType ptype : ptypes) {
             ResolvedJavaType type = ptype.getType();
             HotSpotResolvedJavaMethod concrete = (HotSpotResolvedJavaMethod) type.resolveConcreteMethod(info.callTarget.targetMethod(), info.invoke.getContextType());
-            assert concrete.isInVirtualMethodTable(type);
+            if (!concrete.isInVirtualMethodTable(type))
+                return Optional.empty();
             int offset = concrete.vtableEntryOffset(type);
             offsets.computeIfAbsent(offset, k -> new ArrayList<>()).add(ptype);
         }
@@ -75,11 +74,11 @@ public class CachingOffsetStrategy implements MethodOffsetStrategy {
 
             @Override
             public NodeCycles cycles() {
-                return NodeCycles.CYCLES_1;
+                return NodeCycles.compute(keys.length * 2);
             }
 
             @Override
-            public ValueNode apply() {
+            public Optional<ValueNode> apply() {
                 AbstractBeginNode[] successors = new AbstractBeginNode[offsets.size() + 1];
                 MergeNode merge = info.graph.add(new MergeNode());
                 ValuePhiNode phi = info.graph.addOrUnique(new ValuePhiNode(StampFactory.intValue(), merge));
@@ -102,9 +101,7 @@ public class CachingOffsetStrategy implements MethodOffsetStrategy {
                 pred.setNext(typeSwitch);
                 merge.setNext(info.invoke.asNode());
 
-                info.graph.getDebug().forceDump(info.graph, "caching");
-
-                return typeSwitch;
+                return Optional.of(phi);
             }
         });
     }

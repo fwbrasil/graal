@@ -121,6 +121,8 @@ public final class TypeSwitchNode extends SwitchNode implements LIRLowerable, Si
 
     @Override
     public void generate(NodeLIRBuilderTool gen) {
+        if (graph().toString().contains("doItOuter"))
+            System.out.println(1);
         gen.emitSwitch(this);
     }
 
