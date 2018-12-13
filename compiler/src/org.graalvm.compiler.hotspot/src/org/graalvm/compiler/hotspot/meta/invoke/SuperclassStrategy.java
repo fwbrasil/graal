@@ -44,7 +44,7 @@ public class SuperclassStrategy implements MethodOffsetStrategy {
 
                     @Override
                     public int effort() {
-                        return 2;
+                        return 3;
                     }
 
                     @Override

@@ -1,6 +1,7 @@
 package org.graalvm.compiler.hotspot.meta.invoke;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,17 +33,15 @@ public class CachingStrategy implements MethodOffsetStrategy {
     public Optional<Evaluation> evaluate(Info info) {
         JavaTypeProfile profile = info.callTarget.getProfile();
         double notRecordedProbability = profile.getNotRecordedProbability();
-        ProfiledType[] ptypes = profile.getTypes();
-        Map<Integer, List<ProfiledType>> offsets = new HashMap<>();
 
-        for (ProfiledType ptype : ptypes) {
-            ResolvedJavaType type = ptype.getType();
-            HotSpotResolvedJavaMethod concrete = (HotSpotResolvedJavaMethod) type.resolveConcreteMethod(info.callTarget.targetMethod(), info.invoke.getContextType());
-            if (!concrete.isInVirtualMethodTable(type))
-                return Optional.empty();
-            int offset = concrete.vtableEntryOffset(type);
-            offsets.computeIfAbsent(offset, k -> new ArrayList<>()).add(ptype);
-        }
+        if (notRecordedProbability > 0D)
+            return Optional.empty();
+
+        ProfiledType[] ptypes = profile.getTypes();
+        Map<Integer, List<ProfiledType>> offsets = MethodOffsetStrategy.offsetMap(info, ptypes);
+
+        if (offsets == null)
+            return Optional.empty();
 
         ResolvedJavaType[] keys = new ResolvedJavaType[ptypes.length];
         double[] keyProbabilities = new double[ptypes.length + 1];
@@ -74,11 +73,15 @@ public class CachingStrategy implements MethodOffsetStrategy {
 
             @Override
             public int effort() {
-                return keys.length * 2;
+                int effort = 1;
+                for (int i = 0; i < keyProbabilities.length; i++)
+                    effort += 2 * keyProbabilities[i];
+                return effort + 2;
             }
 
             @Override
             public Optional<ValueNode> apply() {
+
                 AbstractBeginNode[] successors = new AbstractBeginNode[offsets.size() + 1];
                 MergeNode merge = info.graph.add(new MergeNode());
                 ValuePhiNode phi = info.graph.addOrUnique(new ValuePhiNode(StampFactory.intValue(), merge));

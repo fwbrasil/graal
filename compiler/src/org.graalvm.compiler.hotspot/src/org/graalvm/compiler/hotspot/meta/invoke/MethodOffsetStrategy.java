@@ -2,13 +2,16 @@ package org.graalvm.compiler.hotspot.meta.invoke;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.graalvm.compiler.core.common.GraalOptions;
 import org.graalvm.compiler.hotspot.GraalHotSpotVMConfig;
+import org.graalvm.compiler.hotspot.meta.invoke.MethodOffsetStrategy.Info;
 import org.graalvm.compiler.nodes.Invoke;
 import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.nodes.ValueNode;
@@ -20,8 +23,23 @@ import jdk.vm.ci.hotspot.HotSpotConstantReflectionProvider;
 import jdk.vm.ci.hotspot.HotSpotResolvedJavaMethod;
 import jdk.vm.ci.meta.MetaAccessProvider;
 import jdk.vm.ci.meta.ResolvedJavaType;
+import jdk.vm.ci.meta.JavaTypeProfile.ProfiledType;
 
 public interface MethodOffsetStrategy {
+
+    public static Map<Integer, List<ProfiledType>> offsetMap(Info info, ProfiledType[] ptypes) {
+        Map<Integer, List<ProfiledType>> offsets = new HashMap<>();
+
+        for (ProfiledType ptype : ptypes) {
+            ResolvedJavaType type = ptype.getType();
+            HotSpotResolvedJavaMethod concrete = (HotSpotResolvedJavaMethod) type.resolveConcreteMethod(info.callTarget.targetMethod(), info.invoke.getContextType());
+            if (!concrete.isInVirtualMethodTable(type))
+                return null;
+            int offset = concrete.vtableEntryOffset(type);
+            offsets.computeIfAbsent(offset, k -> new ArrayList<>()).add(ptype);
+        }
+        return offsets;
+    }
 
     public static class Info {
         public final StructuredGraph graph;
@@ -74,22 +92,25 @@ public interface MethodOffsetStrategy {
 
         String strategiesOption = GraalOptions.MethodOffsetStrategies.getValue(graph.getOptions());
 
-        if (strategiesOption == null)
-            throw new NullPointerException("MethodOffsetStrategies option can't be null");
-
         List<MethodOffsetStrategy> strategies = new ArrayList<>();
-        for (String str : strategiesOption.split(",")) {
-            if ("FixedOffset".equals(str))
-                strategies.add(new FixedOffsetStrategy());
-            else if ("Superclass".equals(str))
-                strategies.add(new SuperclassStrategy());
-            else if ("Caching".equals(str))
-                strategies.add(new CachingStrategy());
-            else if ("Fallback".equals(str))
-                strategies.add(new FallbackStrategy());
-            else if (!str.isEmpty())
-                throw new IllegalStateException("Invalid method offset strategy: " + str);
-        }
+
+        if (strategiesOption == null)
+            strategies = Arrays.asList(new FixedOffsetStrategy(), new SingleMethodStrategy(), new SuperclassStrategy(), new CachingStrategy(), new FallbackStrategy());
+        else
+            for (String str : strategiesOption.split(",")) {
+                if ("FixedOffset".equals(str))
+                    strategies.add(new FixedOffsetStrategy());
+                else if ("SingleMethod".equals(str))
+                    strategies.add(new SingleMethodStrategy());
+                else if ("Superclass".equals(str))
+                    strategies.add(new SuperclassStrategy());
+                else if ("Caching".equals(str))
+                    strategies.add(new CachingStrategy());
+                else if ("Fallback".equals(str))
+                    strategies.add(new FallbackStrategy());
+                else if (!str.isEmpty())
+                    throw new IllegalStateException("Invalid method offset strategy: " + str);
+            }
 
         List<Evaluation> evaluations = strategies.stream().flatMap(s -> s.evaluate(info).map(Stream::of).orElseGet(Stream::empty)).sorted((a, b) -> a.effort() - b.effort()).collect(
                         Collectors.toList());
@@ -98,9 +119,9 @@ public interface MethodOffsetStrategy {
             return Optional.empty();
         } else {
             Evaluation evaluation = evaluations.get(0);
-            if (!evaluation.toString().contains("Fixed") &&
-                            !evaluation.toString().contains("Fallback"))
-                System.out.println("" + graph.method().getName() + ": " + invoke + " => " + evaluations);
+// if (!evaluation.toString().contains("Fixed") &&
+// !evaluation.toString().contains("Fallback"))
+// System.out.println("" + graph.method().getName() + ": " + invoke + " => " + evaluations);
             Optional<ValueNode> value = evaluation.apply();
             return value;
         }

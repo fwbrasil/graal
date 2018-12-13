@@ -148,6 +148,7 @@ import org.graalvm.compiler.nodes.java.NewArrayNode;
 import org.graalvm.compiler.nodes.java.NewInstanceNode;
 import org.graalvm.compiler.nodes.java.NewMultiArrayNode;
 import org.graalvm.compiler.nodes.java.RawMonitorEnterNode;
+import org.graalvm.compiler.nodes.java.TypeSwitchNode;
 import org.graalvm.compiler.nodes.memory.FloatingReadNode;
 import org.graalvm.compiler.nodes.memory.HeapAccess.BarrierType;
 import org.graalvm.compiler.nodes.memory.ReadNode;
@@ -385,10 +386,16 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
                 }
             } else if (n instanceof ProfileNode) {
                 profileSnippets.lower((ProfileNode) n, tool);
+            } else if (n instanceof TypeSwitchNode) {
+                lowerTypeSwitch((TypeSwitchNode) n);
             } else {
                 super.lower(n, tool);
             }
         }
+    }
+
+    private void lowerTypeSwitch(TypeSwitchNode n) {
+
     }
 
     private static void lowerComputeObjectAddressNode(ComputeObjectAddressNode n) {

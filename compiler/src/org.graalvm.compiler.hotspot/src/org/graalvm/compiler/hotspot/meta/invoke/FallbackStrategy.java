@@ -21,7 +21,7 @@ public class FallbackStrategy implements MethodOffsetStrategy {
                     return 0;
                 } else {
                     ProfiledType[] ptypes = info.callTarget.getProfile().getTypes();
-                    double cycles = 0D;
+                    double effort = 0D;
                     for (ProfiledType ptype : ptypes) {
                         ResolvedJavaType[] interfaces = ptype.getType().getInterfaces();
                         int i = 0;
@@ -29,9 +29,9 @@ public class FallbackStrategy implements MethodOffsetStrategy {
                             i++;
                         }
                         assert interfaces[i] == type;
-                        cycles += ptype.getProbability() * (i + 1) * 2;
+                        effort += ptype.getProbability() * (i + 1) * 2;
                     }
-                    return (int) cycles + 2;
+                    return (int) effort;
                 }
             }
 

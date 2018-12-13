@@ -71,7 +71,7 @@ public final class GraalOptions {
     public static final OptionKey<Boolean> InlineEverything = new OptionKey<>(false);
 
     @Option(help = "", type = OptionType.Expert)
-    public static final OptionKey<String> MethodOffsetStrategies = new OptionKey<>("FixedOffset,Superclass,Caching,Fallback");
+    public static final OptionKey<String> MethodOffsetStrategies = new OptionKey<>(null);
 
     // escape analysis settings
     @Option(help = "", type = OptionType.Debug)
