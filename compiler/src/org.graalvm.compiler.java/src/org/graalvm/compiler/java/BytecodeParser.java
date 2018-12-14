@@ -2661,7 +2661,7 @@ public class BytecodeParser implements GraphBuilderContext {
         return graph.unique(nextBciNode);
     }
 
-    protected void genIntegerSwitch(ValueNode value, ArrayList<BciBlock> actualSuccessors, int[] keys, double[] keyProbabilities, int[] keySuccessors) {
+    protected void genIntegerSwitch(ValueNode value, ArrayList<BciBlock> actualSuccessors, long[] keys, double[] keyProbabilities, int[] keySuccessors) {
         if (value.isConstant()) {
             JavaConstant constant = (JavaConstant) value.asConstant();
             int constantValue = constant.asInt();
@@ -4639,7 +4639,7 @@ public class BytecodeParser implements GraphBuilderContext {
         }
 
         ArrayList<BciBlock> actualSuccessors = new ArrayList<>();
-        int[] keys = new int[nofCases];
+        long[] keys = new long[nofCases];
         int[] keySuccessors = new int[nofCasesPlusDefault];
         int deoptSuccessorIndex = -1;
         int nextSuccessorIndex = 0;

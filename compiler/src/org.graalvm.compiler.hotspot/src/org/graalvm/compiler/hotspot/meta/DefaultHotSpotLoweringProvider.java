@@ -40,7 +40,12 @@ import static org.graalvm.compiler.hotspot.replacements.HotSpotReplacementsUtil.
 import static org.graalvm.word.LocationIdentity.any;
 
 import java.lang.ref.Reference;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Optional;
 
 import org.graalvm.compiler.api.directives.GraalDirectives;
@@ -105,6 +110,7 @@ import org.graalvm.compiler.nodes.AbstractDeoptimizeNode;
 import org.graalvm.compiler.nodes.CompressionNode.CompressionOp;
 import org.graalvm.compiler.nodes.ConstantNode;
 import org.graalvm.compiler.nodes.FixedNode;
+import org.graalvm.compiler.nodes.FixedWithNextNode;
 import org.graalvm.compiler.nodes.Invoke;
 import org.graalvm.compiler.nodes.LogicNode;
 import org.graalvm.compiler.nodes.LoweredCallTargetNode;
@@ -127,6 +133,7 @@ import org.graalvm.compiler.nodes.extended.BytecodeExceptionNode.BytecodeExcepti
 import org.graalvm.compiler.nodes.extended.ForeignCallNode;
 import org.graalvm.compiler.nodes.extended.GetClassNode;
 import org.graalvm.compiler.nodes.extended.GuardedUnsafeLoadNode;
+import org.graalvm.compiler.nodes.extended.IntegerSwitchNode;
 import org.graalvm.compiler.nodes.extended.LoadHubNode;
 import org.graalvm.compiler.nodes.extended.LoadMethodNode;
 import org.graalvm.compiler.nodes.extended.OSRLocalNode;
@@ -394,8 +401,108 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
         }
     }
 
-    private void lowerTypeSwitch(TypeSwitchNode n) {
+    private static class Item {
+        public final JavaConstant key;
+        public final double probability;
+        public final int sucessor;
 
+        public Item(JavaConstant key, double probability, int sucessor) {
+            super();
+            this.key = key;
+            this.probability = probability;
+            this.sucessor = sucessor;
+        }
+    }
+
+    private void lowerTypeSwitch(TypeSwitchNode n) {
+        int keyCount = n.keyCount();
+        List<Item> items = new ArrayList<>(keyCount);
+        for (int i = 0; i < keyCount; i++) {
+
+            final int j = i;
+            JavaConstant classConstant = constantReflection.asJavaClass(n.typeAt(i));
+            JavaConstant withToLong = new JavaConstant() {
+
+                @Override
+                public boolean isNull() {
+                    return classConstant.isNull();
+                }
+
+                @Override
+                public boolean isDefaultForKind() {
+                    return classConstant.isDefaultForKind();
+                }
+
+                @Override
+                public JavaKind getJavaKind() {
+                    return classConstant.getJavaKind();
+                }
+
+                @Override
+                public long asLong() {
+                    try {
+                        ResolvedJavaType type = n.typeAt(j);
+                        Method m = type.getClass().getDeclaredMethod("getMetaspacePointer");
+                        m.setAccessible(true);
+                        return (long) m.invoke(type);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+
+                @Override
+                public int asInt() {
+                    return classConstant.asInt();
+                }
+
+                @Override
+                public float asFloat() {
+                    return classConstant.asFloat();
+                }
+
+                @Override
+                public double asDouble() {
+                    return classConstant.asDouble();
+                }
+
+                @Override
+                public Object asBoxedPrimitive() {
+                    return classConstant.asBoxedPrimitive();
+                }
+
+                @Override
+                public boolean asBoolean() {
+                    return classConstant.asBoolean();
+                }
+            };
+            items.add(new Item(withToLong, n.keyProbability(i), n.keySuccessorIndex(i)));
+        }
+        items.sort(new Comparator<Item>() {
+            @Override
+            public int compare(Item o1, Item o2) {
+                return (int) (o1.key.asLong() - o2.key.asLong());
+            }
+        });
+
+        AbstractBeginNode[] newSuccessors = new AbstractBeginNode[n.getSuccessorCount()];
+
+        for (int i = 0; i < n.getSuccessorCount(); i++)
+            newSuccessors[i] = n.blockSuccessor(i);
+
+        JavaConstant[] newKeys = new JavaConstant[keyCount];
+        double[] newKeyProbabilities = new double[keyCount];
+        int[] newKeySuccessors = new int[keyCount];
+
+        for (int i = 0; i < keyCount; i++) {
+            Item item = items.get(i);
+            newKeys[i] = item.key;
+            newKeyProbabilities[i] = item.probability;
+            newKeySuccessors[i] = item.sucessor;
+        }
+
+        IntegerSwitchNode newSwitch = n.graph().add(new IntegerSwitchNode(n.value(), newSuccessors, newKeys, newKeyProbabilities, newKeySuccessors));
+        ((FixedWithNextNode) n.predecessor()).setNext(newSwitch);
+        GraphUtil.killWithUnusedFloatingInputs(n);
     }
 
     private static void lowerComputeObjectAddressNode(ComputeObjectAddressNode n) {

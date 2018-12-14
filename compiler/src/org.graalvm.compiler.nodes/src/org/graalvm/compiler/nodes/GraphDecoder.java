@@ -1938,7 +1938,7 @@ class LoopDetector implements Runnable {
         int numSuccessors = numKeys + 1;
 
         AbstractBeginNode[] switchSuccessors = new AbstractBeginNode[numSuccessors];
-        int[] switchKeys = new int[numKeys];
+        long[] switchKeys = new long[numKeys];
         double[] switchKeyProbabilities = new double[numSuccessors];
         int[] switchKeySuccessors = new int[numSuccessors];
 

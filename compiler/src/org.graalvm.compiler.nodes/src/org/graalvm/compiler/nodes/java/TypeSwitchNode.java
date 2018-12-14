@@ -48,6 +48,8 @@ import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.extended.LoadHubNode;
 import org.graalvm.compiler.nodes.extended.SwitchNode;
 import org.graalvm.compiler.nodes.spi.LIRLowerable;
+import org.graalvm.compiler.nodes.spi.Lowerable;
+import org.graalvm.compiler.nodes.spi.LoweringTool;
 import org.graalvm.compiler.nodes.spi.NodeLIRBuilderTool;
 import org.graalvm.compiler.nodes.util.GraphUtil;
 
@@ -60,7 +62,7 @@ import jdk.vm.ci.meta.ResolvedJavaType;
  * comparison is an exact type comparison, not an instanceof.
  */
 @NodeInfo
-public final class TypeSwitchNode extends SwitchNode implements LIRLowerable, Simplifiable {
+public final class TypeSwitchNode extends SwitchNode implements LIRLowerable, Lowerable, Simplifiable {
 
     public static final NodeClass<TypeSwitchNode> TYPE = NodeClass.create(TypeSwitchNode.class);
     protected final ResolvedJavaType[] keys;
@@ -239,5 +241,10 @@ public final class TypeSwitchNode extends SwitchNode implements LIRLowerable, Si
             }
         }
         return result;
+    }
+
+    @Override
+    public void lower(LoweringTool tool) {
+        tool.getLowerer().lower(this, tool);
     }
 }
