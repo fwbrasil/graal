@@ -27,14 +27,17 @@ package org.graalvm.compiler.core.gen;
 import static jdk.vm.ci.code.ValueUtil.asRegister;
 import static jdk.vm.ci.code.ValueUtil.isLegal;
 import static jdk.vm.ci.code.ValueUtil.isRegister;
+import static org.graalvm.compiler.core.common.GraalOptions.MatchExpressions;
 import static org.graalvm.compiler.core.common.SpeculativeExecutionAttacksMitigations.AllTargets;
 import static org.graalvm.compiler.core.common.SpeculativeExecutionAttacksMitigations.Options.MitigateSpeculativeExecutionAttacks;
-import static org.graalvm.compiler.core.common.GraalOptions.MatchExpressions;
 import static org.graalvm.compiler.debug.DebugOptions.LogVerbose;
 import static org.graalvm.compiler.lir.LIR.verifyBlock;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 
 import org.graalvm.collections.EconomicMap;
@@ -63,6 +66,9 @@ import org.graalvm.compiler.lir.LabelRef;
 import org.graalvm.compiler.lir.StandardOp.JumpOp;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
 import org.graalvm.compiler.lir.SwitchStrategy;
+import org.graalvm.compiler.lir.SwitchStrategy.BinaryStrategy;
+import org.graalvm.compiler.lir.SwitchStrategy.RangesStrategy;
+import org.graalvm.compiler.lir.SwitchStrategy.SequentialStrategy;
 import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.lir.debug.LIRGenerationDebugContext;
 import org.graalvm.compiler.lir.framemap.FrameMapBuilder;
@@ -100,6 +106,7 @@ import org.graalvm.compiler.nodes.cfg.Block;
 import org.graalvm.compiler.nodes.cfg.ControlFlowGraph;
 import org.graalvm.compiler.nodes.extended.IntegerSwitchNode;
 import org.graalvm.compiler.nodes.extended.SwitchNode;
+import org.graalvm.compiler.nodes.java.TypeSwitchNode;
 import org.graalvm.compiler.nodes.spi.LIRLowerable;
 import org.graalvm.compiler.nodes.spi.NodeLIRBuilderTool;
 import org.graalvm.compiler.nodes.spi.NodeValueMap;
@@ -114,6 +121,7 @@ import jdk.vm.ci.meta.Constant;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.PlatformKind;
+import jdk.vm.ci.meta.ResolvedJavaType;
 import jdk.vm.ci.meta.Value;
 
 /**
@@ -686,6 +694,55 @@ public abstract class NodeLIRBuilder implements NodeLIRBuilderTool, LIRGeneratio
                     assert keyConstants[i].getJavaKind() == keyKind;
                 }
                 gen.emitStrategySwitch(keyConstants, keyProbabilities, keyTargets, defaultTarget, value);
+            } else if (x instanceof TypeSwitchNode && System.getProperty("bts") != null) {
+                TypeSwitchNode typeSwitch = (TypeSwitchNode) x;
+
+                KeyData[] data = new KeyData[keyCount];
+
+                for (int i = 0; i < keyCount; i++) {
+                    try {
+                        ResolvedJavaType type = typeSwitch.typeAt(i);
+                        Method m = type.getClass().getDeclaredMethod("getMetaspacePointer");
+                        m.setAccessible(true);
+                        long address = (long) m.invoke(type);
+                        LabelRef target = getLIRBlock(typeSwitch.keySuccessor(i));
+                        double probability = typeSwitch.keyProbability(i);
+                        data[i] = new KeyData(target, address, probability);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+
+                Arrays.sort(data, new Comparator<KeyData>() {
+                    @Override
+                    public int compare(KeyData o1, KeyData o2) {
+                        return (int) (o1.address - o2.address);
+                    }
+                });
+
+                LabelRef[] keyTargets = new LabelRef[keyCount];
+                JavaConstant[] keyConstants = new JavaConstant[keyCount];
+                double[] keyProbabilities = new double[keyCount];
+                for (int i = 0; i < keyCount; i++) {
+                    KeyData keyData = data[i];
+                    keyTargets[i] = keyData.target;
+                    keyConstants[i] = JavaConstant.forLong(keyData.address);
+                    keyProbabilities[i] = keyData.probability;
+                }
+
+                if (x.graph().toString().contains("bench")) {
+                    SwitchStrategy[] s = SwitchStrategy.getStrategies(keyProbabilities, keyConstants, keyTargets);
+                    Arrays.sort(s, new Comparator<SwitchStrategy>() {
+                        @Override
+                        public int compare(SwitchStrategy o1, SwitchStrategy o2) {
+                            return (int) (o1.getAverageEffort() - o2.getAverageEffort());
+                        }
+
+                    });
+                    System.out.println(Arrays.toString(s));
+                }
+                SwitchStrategy strategy = SwitchStrategy.getBestStrategy(keyProbabilities, keyConstants, keyTargets);
+                gen.emitStrategySwitch(strategy, value, keyTargets, defaultTarget);
             } else {
                 // keyKind != JavaKind.Int || !x.isSorted()
                 LabelRef[] keyTargets = new LabelRef[keyCount];
@@ -700,6 +757,19 @@ public abstract class NodeLIRBuilder implements NodeLIRBuilderTool, LIRGeneratio
                 // hopefully only a few entries
                 gen.emitStrategySwitch(new SwitchStrategy.SequentialStrategy(keyProbabilities, keyConstants), value, keyTargets, defaultTarget);
             }
+        }
+    }
+
+    private static class KeyData {
+        public final LabelRef target;
+        public final long address;
+        public final double probability;
+
+        public KeyData(LabelRef target, long address, double probability) {
+            super();
+            this.target = target;
+            this.address = address;
+            this.probability = probability;
         }
     }
 

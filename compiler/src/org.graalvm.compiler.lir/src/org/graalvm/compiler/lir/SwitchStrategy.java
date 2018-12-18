@@ -499,7 +499,7 @@ public abstract class SwitchStrategy {
 
     public abstract void run(SwitchClosure closure);
 
-    private static SwitchStrategy[] getStrategies(double[] keyProbabilities, JavaConstant[] keyConstants, LabelRef[] keyTargets) {
+    public static SwitchStrategy[] getStrategies(double[] keyProbabilities, JavaConstant[] keyConstants, LabelRef[] keyTargets) {
         SwitchStrategy[] strategies = new SwitchStrategy[]{new SequentialStrategy(keyProbabilities, keyConstants), new RangesStrategy(keyProbabilities, keyConstants),
                         new BinaryStrategy(keyProbabilities, keyConstants)};
         for (SwitchStrategy strategy : strategies) {
