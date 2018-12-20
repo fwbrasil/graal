@@ -59,7 +59,7 @@ import org.graalvm.compiler.lir.StandardOp;
 import org.graalvm.compiler.lir.StandardOp.BlockEndOp;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
 import org.graalvm.compiler.lir.StandardOp.SaveRegistersOp;
-import org.graalvm.compiler.lir.SwitchStrategy;
+import org.graalvm.compiler.lir.switches.SwitchStrategy;
 import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.options.Option;
 import org.graalvm.compiler.options.OptionKey;

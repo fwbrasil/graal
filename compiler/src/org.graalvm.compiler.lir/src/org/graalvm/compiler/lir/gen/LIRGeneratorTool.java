@@ -37,8 +37,8 @@ import org.graalvm.compiler.graph.NodeSourcePosition;
 import org.graalvm.compiler.lir.LIRFrameState;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.LabelRef;
-import org.graalvm.compiler.lir.SwitchStrategy;
 import org.graalvm.compiler.lir.Variable;
+import org.graalvm.compiler.lir.switches.SwitchStrategy;
 
 import jdk.vm.ci.code.CodeCacheProvider;
 import jdk.vm.ci.code.Register;

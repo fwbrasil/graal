@@ -41,11 +41,11 @@ import org.graalvm.compiler.asm.sparc.SPARCMacroAssembler;
 import org.graalvm.compiler.core.common.calc.Condition;
 import org.graalvm.compiler.lir.LIRInstructionClass;
 import org.graalvm.compiler.lir.LabelRef;
-import org.graalvm.compiler.lir.SwitchStrategy;
 import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.lir.asm.CompilationResultBuilder;
 import org.graalvm.compiler.lir.sparc.SPARCControlFlow;
 import org.graalvm.compiler.lir.sparc.SPARCDelayedControlTransfer;
+import org.graalvm.compiler.lir.switches.SwitchStrategy;
 
 import jdk.vm.ci.code.Register;
 import jdk.vm.ci.hotspot.HotSpotMetaspaceConstant;

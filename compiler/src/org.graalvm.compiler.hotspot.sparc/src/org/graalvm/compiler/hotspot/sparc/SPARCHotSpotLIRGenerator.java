@@ -54,7 +54,6 @@ import org.graalvm.compiler.lir.LIRFrameState;
 import org.graalvm.compiler.lir.LIRInstruction;
 import org.graalvm.compiler.lir.LabelRef;
 import org.graalvm.compiler.lir.StandardOp.SaveRegistersOp;
-import org.graalvm.compiler.lir.SwitchStrategy;
 import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.lir.VirtualStackSlot;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
@@ -65,6 +64,7 @@ import org.graalvm.compiler.lir.sparc.SPARCImmediateAddressValue;
 import org.graalvm.compiler.lir.sparc.SPARCMove.CompareAndSwapOp;
 import org.graalvm.compiler.lir.sparc.SPARCMove.NullCheckOp;
 import org.graalvm.compiler.lir.sparc.SPARCMove.StoreOp;
+import org.graalvm.compiler.lir.switches.SwitchStrategy;
 import org.graalvm.compiler.lir.sparc.SPARCPrefetchOp;
 import org.graalvm.compiler.lir.sparc.SPARCSaveRegistersOp;
 
