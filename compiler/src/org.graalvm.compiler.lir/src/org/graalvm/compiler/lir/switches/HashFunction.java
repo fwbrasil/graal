@@ -71,15 +71,15 @@ abstract class HashFunction {
                       p -> (x, s) -> (x * p) >> s,
                       (gen, p) -> (x, s) -> gen.emitShr(gen.emitMul(x, p, false), s));
 
-        addWithPrimes("rotateRight(x, p)", 5,
+        addWithPrimes("rotateRight(x, p)", 3,
                       p -> (x, s) -> Long.rotateRight(x, p),
                       (gen, p) -> (x, s) -> rotateRight(gen, x, p));
 
-        addWithPrimes("rotateRight(x, p) + x", 6,
+        addWithPrimes("rotateRight(x, p) + x", 4,
                       p -> (x, s) -> Long.rotateRight(x, p) + x,
                       (gen, p) -> (x, s) -> gen.emitAdd(rotateRight(gen, x, p), x, false));
 
-        addWithPrimes("rotateRight(x, p) ^ x", 2,
+        addWithPrimes("rotateRight(x, p) ^ x", 4,
                       p -> (x, s) -> Long.rotateRight(x, p) ^ x,
                       (gen, p) -> (x, s) -> gen.emitXor(rotateRight(gen, x, p), x));
       //@formatter:on
