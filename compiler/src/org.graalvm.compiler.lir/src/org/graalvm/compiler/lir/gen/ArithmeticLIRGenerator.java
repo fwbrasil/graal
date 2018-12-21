@@ -39,6 +39,7 @@ public abstract class ArithmeticLIRGenerator implements ArithmeticLIRGeneratorTo
 
     LIRGenerator lirGen;
 
+    @Override
     public LIRGenerator getLIRGen() {
         return lirGen;
     }
