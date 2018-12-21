@@ -48,6 +48,7 @@ import org.graalvm.compiler.lir.StandardOp;
 import org.graalvm.compiler.lir.StandardOp.BlockEndOp;
 import org.graalvm.compiler.lir.Variable;
 import org.graalvm.compiler.lir.asm.CompilationResultBuilder;
+import org.graalvm.compiler.lir.switches.Hasher;
 import org.graalvm.compiler.lir.switches.SwitchStrategy;
 import org.graalvm.compiler.lir.switches.SwitchStrategy.BaseSwitchClosure;
 
@@ -310,6 +311,93 @@ public class AMD64ControlFlow {
             }
 
             JumpTable jt = new JumpTable(jumpTablePos, lowKey, highKey, 4);
+            crb.compilationResult.addAnnotation(jt);
+        }
+    }
+
+    public static final class HashSwitchOp extends AMD64BlockEndOp {
+        public static final LIRInstructionClass<HashSwitchOp> TYPE = LIRInstructionClass.create(HashSwitchOp.class);
+        private final Hasher hasher;
+        private final JavaConstant[] keys;
+        private final LabelRef defaultTarget;
+        private final LabelRef[] targets;
+        @Use protected Value hash;
+        @Temp({REG, HINT}) protected Value idxScratch;
+        @Temp protected Value scratch;
+        @Use protected Value value;
+
+        public HashSwitchOp(final Hasher hasher, final JavaConstant[] keys, final LabelRef defaultTarget, LabelRef[] targets, Value value, Value hash, Variable scratch, Variable idxScratch) {
+            super(TYPE);
+            this.hasher = hasher;
+            this.keys = keys;
+            this.defaultTarget = defaultTarget;
+            this.targets = targets;
+            this.value = value;
+            this.hash = hash;
+            this.scratch = scratch;
+            this.idxScratch = idxScratch;
+        }
+
+        @Override
+        public void emitCode(CompilationResultBuilder crb, AMD64MacroAssembler masm) {
+            Register valueReg = asRegister(value, AMD64Kind.DWORD);
+            Register indexReg = asRegister(hash, AMD64Kind.DWORD);
+            Register idxScratchReg = asRegister(idxScratch, AMD64Kind.DWORD);
+            Register scratchReg = asRegister(scratch, AMD64Kind.QWORD);
+
+            if (!indexReg.equals(idxScratchReg)) {
+                masm.movl(idxScratchReg, indexReg);
+            }
+
+            // Set scratch to address of jump table
+            masm.leaq(scratchReg, new AMD64Address(AMD64.rip, 0));
+            final int afterLea = masm.position();
+
+            // Load jump table entry into scratch and jump to it
+            masm.movslq(idxScratchReg, new AMD64Address(scratchReg, idxScratchReg, Scale.Times4, 0));
+            masm.addq(scratchReg, idxScratchReg);
+
+            // Jump to default target if index is not within the jump table
+            if (defaultTarget != null) {
+                masm.cmpl(idxScratchReg, valueReg);
+                masm.jcc(ConditionFlag.NotEqual, defaultTarget.label());
+            }
+
+            masm.addq(scratchReg, 4);
+            masm.jmp(scratchReg);
+
+            // Inserting padding so that jump table address is 4-byte aligned
+            if ((masm.position() & 0x3) != 0) {
+                masm.nop(4 - (masm.position() & 0x3));
+            }
+
+            // Patch LEA instruction above now that we know the position of the jump table
+            // TODO this is ugly and should be done differently
+            final int jumpTablePos = masm.position();
+            final int leaDisplacementPosition = afterLea - 4;
+            masm.emitInt(jumpTablePos - afterLea, leaDisplacementPosition);
+
+            // Emit jump table entries
+            for (int i = 0; i < targets.length; i++) {
+
+                Label label = targets[i].label();
+                int offsetToJumpTableBase = masm.position() - jumpTablePos;
+                int keyHash = hasher.hash(keys[i].asLong());
+                if (label.isBound()) {
+                    int imm32 = label.position() - jumpTablePos;
+                    masm.emitInt(keyHash);
+                    masm.emitInt(imm32);
+                } else {
+                    label.addPatchAt(masm.position());
+
+                    masm.emitInt(keyHash);
+                    masm.emitByte(0); // pseudo-opcode for jump table entry
+                    masm.emitShort(offsetToJumpTableBase);
+                    masm.emitByte(0); // padding to make jump table entry 4 bytes wide
+                }
+            }
+
+            JumpTable jt = new JumpTable(jumpTablePos, keys[0].asInt(), keys[keys.length - 1].asInt(), 4);
             crb.compilationResult.addAnnotation(jt);
         }
     }

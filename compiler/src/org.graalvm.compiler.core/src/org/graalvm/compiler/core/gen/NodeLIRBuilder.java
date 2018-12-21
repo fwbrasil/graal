@@ -685,6 +685,8 @@ public abstract class NodeLIRBuilder implements NodeLIRBuilderTool, LIRGeneratio
                     keyProbabilities[i] = intSwitch.keyProbability(i);
                     assert keyConstants[i].getJavaKind() == keyKind;
                 }
+                if (x.graph().toString().contains("sparse"))
+                    System.out.println(1);
                 gen.emitStrategySwitch(keyConstants, keyProbabilities, keyTargets, defaultTarget, value);
             } else {
                 // keyKind != JavaKind.Int || !x.isSorted()

@@ -80,6 +80,7 @@ import org.graalvm.compiler.lir.amd64.AMD64ControlFlow.FloatCondSetOp;
 import org.graalvm.compiler.lir.amd64.AMD64ControlFlow.ReturnOp;
 import org.graalvm.compiler.lir.amd64.AMD64ControlFlow.StrategySwitchOp;
 import org.graalvm.compiler.lir.amd64.AMD64ControlFlow.TableSwitchOp;
+import org.graalvm.compiler.lir.amd64.AMD64ControlFlow.HashSwitchOp;
 import org.graalvm.compiler.lir.amd64.AMD64LFenceOp;
 import org.graalvm.compiler.lir.amd64.AMD64Move;
 import org.graalvm.compiler.lir.amd64.AMD64Move.CompareAndSwapOp;
@@ -92,6 +93,7 @@ import org.graalvm.compiler.lir.amd64.AMD64ZapRegistersOp;
 import org.graalvm.compiler.lir.amd64.AMD64ZapStackOp;
 import org.graalvm.compiler.lir.gen.LIRGenerationResult;
 import org.graalvm.compiler.lir.gen.LIRGenerator;
+import org.graalvm.compiler.lir.switches.Hasher;
 import org.graalvm.compiler.lir.switches.SwitchStrategy;
 import org.graalvm.compiler.phases.util.Providers;
 
@@ -634,6 +636,12 @@ public abstract class AMD64LIRGenerator extends LIRGenerator {
         // a temp is needed for loading object constants
         boolean needsTemp = !LIRKind.isValue(key);
         append(createStrategySwitchOp(strategy, keyTargets, defaultTarget, key, needsTemp ? newVariable(key.getValueKind()) : Value.ILLEGAL));
+    }
+
+    @Override
+    protected void emitHashSwitch(Hasher hasher, JavaConstant[] keys, LabelRef defaultTarget, LabelRef[] targets, Value value) {
+        Value hash = hasher.gen(value, arithmeticLIRGen);
+        append(new HashSwitchOp(hasher, keys, defaultTarget, targets, value, hash, newVariable(LIRKind.value(target().arch.getWordKind())), newVariable(value.getValueKind())));
     }
 
     @Override
