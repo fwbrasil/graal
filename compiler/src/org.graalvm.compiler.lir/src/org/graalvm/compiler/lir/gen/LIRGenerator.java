@@ -459,7 +459,7 @@ public abstract class LIRGenerator implements LIRGeneratorTool {
         double tableSwitchDensity = keyCount / (double) valueRange;
 
         Optional<Hasher> hasher = Hasher.forKeys(keyConstants);
-        double hashTableDensity = hasher.map(h -> keyCount / (double) h.cardinality()).orElse(Double.MAX_VALUE);
+        double hashTableDensity = hasher.map(h -> keyCount / (double) h.cardinality()).orElse(0d);
 
         /*
          * This heuristic tries to find a compromise between the effort for the best switch strategy
@@ -470,7 +470,7 @@ public abstract class LIRGenerator implements LIRGeneratorTool {
         if (strategy.getAverageEffort() < 4 || (tableSwitchDensity < (1 / Math.sqrt(strategy.getAverageEffort())) && hashTableDensity < (1 / Math.sqrt(strategy.getAverageEffort())))) {
             emitStrategySwitch(strategy, value, keyTargets, defaultTarget);
         } else {
-            if (hasher.isPresent()) {
+            if (hashTableDensity > tableSwitchDensity && hasher.isPresent()) {
                 Hasher h = hasher.get();
                 int cardinality = h.cardinality();
                 LabelRef[] targets = new LabelRef[cardinality];
