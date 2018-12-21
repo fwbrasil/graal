@@ -44,6 +44,8 @@ import jdk.vm.ci.meta.ValueKind;
  */
 public interface ArithmeticLIRGeneratorTool {
 
+    LIRGenerator getLIRGen();
+
     Value emitNegate(Value input);
 
     Value emitAdd(Value a, Value b, boolean setFlags);
