@@ -66,26 +66,63 @@ import jdk.vm.ci.meta.JavaKind;
 public final class IntegerSwitchNode extends SwitchNode implements LIRLowerable, Simplifiable {
     public static final NodeClass<IntegerSwitchNode> TYPE = NodeClass.create(IntegerSwitchNode.class);
 
-    protected final int[] keys;
+    protected final JavaConstant[] keys;
 
-    public IntegerSwitchNode(ValueNode value, AbstractBeginNode[] successors, int[] keys, double[] keyProbabilities, int[] keySuccessors) {
+    public static IntegerSwitchNode create(ValueNode value, AbstractBeginNode[] successors, KeyData[] data) {
+        Arrays.sort(data, new Comparator<KeyData>() {
+            @Override
+            public int compare(KeyData o1, KeyData o2) {
+                return (int) (o1.key.asLong() - o2.key.asLong());
+            }
+        });
+        JavaConstant[] keys = new JavaConstant[data.length];
+        double[] keyProbabilities = new double[data.length];
+        int[] keySuccessors = new int[data.length];
+
+        for (int i = 0; i < data.length; i++) {
+            KeyData d = data[i];
+            keys[i] = d.key;
+            keyProbabilities[i] = d.keyProbability;
+            keySuccessors[i] = d.keySuccessor;
+        }
+        return new IntegerSwitchNode(value, successors, keys, keyProbabilities, keySuccessors);
+    }
+
+    public IntegerSwitchNode(ValueNode value, AbstractBeginNode[] successors, JavaConstant[] keys, double[] keyProbabilities, int[] keySuccessors) {
         super(TYPE, value, successors, keySuccessors, keyProbabilities);
         assert keySuccessors.length == keys.length + 1;
         assert keySuccessors.length == keyProbabilities.length;
         this.keys = keys;
-        assert value.stamp(NodeView.DEFAULT) instanceof PrimitiveStamp && value.stamp(NodeView.DEFAULT).getStackKind().isNumericInteger();
+// assert value.stamp(NodeView.DEFAULT) instanceof PrimitiveStamp &&
+// value.stamp(NodeView.DEFAULT).getStackKind().isNumericInteger();
         assert assertSorted();
+    }
+
+    public IntegerSwitchNode(ValueNode value, AbstractBeginNode[] successors, int[] keys, double[] keyProbabilities, int[] keySuccessors) {
+        this(value, successors, toConstants(keys), keyProbabilities, keySuccessors);
+    }
+
+    public IntegerSwitchNode(ValueNode value, int successorCount, int[] keys, double[] keyProbabilities, int[] keySuccessors) {
+        this(value, successorCount, toConstants(keys), keyProbabilities, keySuccessors);
+    }
+
+    public IntegerSwitchNode(ValueNode value, int successorCount, JavaConstant[] keys, double[] keyProbabilities, int[] keySuccessors) {
+        this(value, new AbstractBeginNode[successorCount], keys, keyProbabilities, keySuccessors);
+    }
+
+    private static JavaConstant[] toConstants(int[] keys) {
+        JavaConstant[] constantKeys = new JavaConstant[keys.length];
+        for (int i = 0; i < keys.length; i++) {
+            constantKeys[i] = JavaConstant.forInt(keys[i]);
+        }
+        return constantKeys;
     }
 
     private boolean assertSorted() {
         for (int i = 1; i < keys.length; i++) {
-            assert keys[i - 1] < keys[i];
+            assert keys[i - 1].asLong() < keys[i].asLong();
         }
         return true;
-    }
-
-    public IntegerSwitchNode(ValueNode value, int successorCount, int[] keys, double[] keyProbabilities, int[] keySuccessors) {
-        this(value, new AbstractBeginNode[successorCount], keys, keyProbabilities, keySuccessors);
     }
 
     @Override
@@ -101,7 +138,7 @@ public final class IntegerSwitchNode extends SwitchNode implements LIRLowerable,
      */
     @Override
     public JavaConstant keyAt(int i) {
-        return JavaConstant.forInt(keys[i]);
+        return keys[i];
     }
 
     @Override
@@ -123,11 +160,11 @@ public final class IntegerSwitchNode extends SwitchNode implements LIRLowerable,
         gen.emitSwitch(this);
     }
 
-    public AbstractBeginNode successorAtKey(int key) {
+    public AbstractBeginNode successorAtKey(JavaConstant key) {
         return blockSuccessor(successorIndexAtKey(key));
     }
 
-    public int successorIndexAtKey(int key) {
+    public int successorIndexAtKey(JavaConstant key) {
         for (int i = 0; i < keyCount(); i++) {
             if (keys[i] == key) {
                 return keySuccessorIndex(i);
@@ -143,7 +180,7 @@ public final class IntegerSwitchNode extends SwitchNode implements LIRLowerable,
             tool.addToWorkList(defaultSuccessor());
             graph().removeSplitPropagate(this, defaultSuccessor());
         } else if (value() instanceof ConstantNode) {
-            killOtherSuccessors(tool, successorIndexAtKey(value().asJavaConstant().asInt()));
+            killOtherSuccessors(tool, successorIndexAtKey(value().asJavaConstant()));
         } else if (tryOptimizeEnumSwitch(tool)) {
             return;
         } else if (tryRemoveUnreachableKeys(tool, value().stamp(view))) {
@@ -151,12 +188,12 @@ public final class IntegerSwitchNode extends SwitchNode implements LIRLowerable,
         }
     }
 
-    static final class KeyData {
-        final int key;
-        final double keyProbability;
-        final int keySuccessor;
+    public static final class KeyData {
+        public final JavaConstant key;
+        public final double keyProbability;
+        public final int keySuccessor;
 
-        KeyData(int key, double keyProbability, int keySuccessor) {
+        public KeyData(JavaConstant key, double keyProbability, int keySuccessor) {
             this.key = key;
             this.keyProbability = keyProbability;
             this.keySuccessor = keySuccessor;
@@ -179,7 +216,7 @@ public final class IntegerSwitchNode extends SwitchNode implements LIRLowerable,
         List<KeyData> newKeyDatas = new ArrayList<>(keys.length);
         ArrayList<AbstractBeginNode> newSuccessors = new ArrayList<>(blockSuccessorCount());
         for (int i = 0; i < keys.length; i++) {
-            if (integerStamp.contains(keys[i]) && keySuccessor(i) != defaultSuccessor()) {
+            if (integerStamp.contains(keys[i].asLong()) && keySuccessor(i) != defaultSuccessor()) {
                 newKeyDatas.add(new KeyData(keys[i], keyProbabilities[i], addNewSuccessor(keySuccessor(i), newSuccessors)));
             }
         }
@@ -246,27 +283,26 @@ public final class IntegerSwitchNode extends SwitchNode implements LIRLowerable,
         }
         int arrayLength = optionalArrayLength;
 
-        Map<Integer, List<Integer>> reverseArrayMapping = new HashMap<>();
+        Map<JavaConstant, List<JavaConstant>> reverseArrayMapping = new HashMap<>();
         for (int i = 0; i < arrayLength; i++) {
             JavaConstant elementConstant = tool.getConstantReflection().readArrayElement(arrayConstant, i);
             if (elementConstant == null || elementConstant.getJavaKind() != JavaKind.Int) {
                 /* Loading a constant value can be denied by the VM. */
                 return false;
             }
-            int element = elementConstant.asInt();
 
             /*
              * The value loaded from the array is the old switch key, the index into the array is
              * the new switch key. We build a mapping from the old switch key to new keys.
              */
-            reverseArrayMapping.computeIfAbsent(element, e -> new ArrayList<>()).add(i);
+            reverseArrayMapping.computeIfAbsent(elementConstant, e -> new ArrayList<>()).add(JavaConstant.forInt(i));
         }
 
         /* Build high-level representation of new switch keys. */
         List<KeyData> newKeyDatas = new ArrayList<>(arrayLength);
         ArrayList<AbstractBeginNode> newSuccessors = new ArrayList<>(blockSuccessorCount());
         for (int i = 0; i < keys.length; i++) {
-            List<Integer> newKeys = reverseArrayMapping.get(keys[i]);
+            List<JavaConstant> newKeys = reverseArrayMapping.get(keys[i]);
             if (newKeys == null || newKeys.size() == 0) {
                 /* The switch case is unreachable, we can ignore it. */
                 continue;
@@ -279,7 +315,7 @@ public final class IntegerSwitchNode extends SwitchNode implements LIRLowerable,
             double newKeyProbability = keyProbabilities[i] / newKeys.size();
             int newKeySuccessor = addNewSuccessor(keySuccessor(i), newSuccessors);
 
-            for (int newKey : newKeys) {
+            for (JavaConstant newKey : newKeys) {
                 newKeyDatas.add(new KeyData(newKey, newKeyProbability, newKeySuccessor));
             }
         }
@@ -318,11 +354,11 @@ public final class IntegerSwitchNode extends SwitchNode implements LIRLowerable,
 
     private void doReplace(ValueNode newValue, List<KeyData> newKeyDatas, ArrayList<AbstractBeginNode> newSuccessors, int newDefaultSuccessor, double newDefaultProbability) {
         /* Sort the new keys (invariant of the IntegerSwitchNode). */
-        newKeyDatas.sort(Comparator.comparingInt(k -> k.key));
+        newKeyDatas.sort(Comparator.comparingLong(k -> k.key.asLong()));
 
         /* Create the final data arrays. */
         int newKeyCount = newKeyDatas.size();
-        int[] newKeys = new int[newKeyCount];
+        JavaConstant[] newKeys = new JavaConstant[newKeyCount];
         double[] newKeyProbabilities = new double[newKeyCount + 1];
         int[] newKeySuccessors = new int[newKeyCount + 1];
 

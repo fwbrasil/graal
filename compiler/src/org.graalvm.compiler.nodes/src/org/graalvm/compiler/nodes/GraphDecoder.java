@@ -1888,8 +1888,8 @@ class LoopDetector implements Runnable {
              * into our temporary data structures for the new, larger, switch node.
              */
             for (int i = 0; i < irreducibleLoopSwitch.keyCount(); i++) {
-                int key = irreducibleLoopSwitch.keyAt(i).asInt();
-                dispatchTable.put(key, irreducibleLoopSwitch.successorAtKey(key));
+                JavaConstant key = irreducibleLoopSwitch.keyAt(i);
+                dispatchTable.put(key.asInt(), irreducibleLoopSwitch.successorAtKey(key));
             }
             unreachableDefaultSuccessor = irreducibleLoopSwitch.defaultSuccessor();
 

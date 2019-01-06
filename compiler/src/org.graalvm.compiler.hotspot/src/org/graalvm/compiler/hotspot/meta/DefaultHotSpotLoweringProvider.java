@@ -122,9 +122,11 @@ import org.graalvm.compiler.nodes.debug.StringToBytesNode;
 import org.graalvm.compiler.nodes.debug.VerifyHeapNode;
 import org.graalvm.compiler.nodes.extended.BytecodeExceptionNode;
 import org.graalvm.compiler.nodes.extended.BytecodeExceptionNode.BytecodeExceptionKind;
+import org.graalvm.compiler.nodes.extended.IntegerSwitchNode.KeyData;
 import org.graalvm.compiler.nodes.extended.ForeignCallNode;
 import org.graalvm.compiler.nodes.extended.GetClassNode;
 import org.graalvm.compiler.nodes.extended.GuardedUnsafeLoadNode;
+import org.graalvm.compiler.nodes.extended.IntegerSwitchNode;
 import org.graalvm.compiler.nodes.extended.LoadHubNode;
 import org.graalvm.compiler.nodes.extended.LoadMethodNode;
 import org.graalvm.compiler.nodes.extended.OSRLocalNode;
@@ -146,6 +148,7 @@ import org.graalvm.compiler.nodes.java.NewArrayNode;
 import org.graalvm.compiler.nodes.java.NewInstanceNode;
 import org.graalvm.compiler.nodes.java.NewMultiArrayNode;
 import org.graalvm.compiler.nodes.java.RawMonitorEnterNode;
+import org.graalvm.compiler.nodes.java.TypeSwitchNode;
 import org.graalvm.compiler.nodes.memory.FloatingReadNode;
 import org.graalvm.compiler.nodes.memory.HeapAccess.BarrierType;
 import org.graalvm.compiler.nodes.memory.ReadNode;
@@ -394,10 +397,32 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
                 }
             } else if (n instanceof ProfileNode) {
                 profileSnippets.lower((ProfileNode) n, tool);
+            } else if (n instanceof TypeSwitchNode) {
+                lowerTypeSwitch((TypeSwitchNode) n, tool);
             } else {
                 super.lower(n, tool);
             }
         }
+    }
+
+    private void lowerTypeSwitch(TypeSwitchNode n, LoweringTool tool) {
+// if (n.graph().toString().contains("doItOuter")) {
+// int keyCount = n.keyCount();
+// KeyData[] data = new KeyData[keyCount];
+// for (int i = 0; i < keyCount; i++) {
+// JavaConstant key =
+// tool.getConstantReflection().getMemoryAccessProvider().readPrimitiveConstant(JavaKind.Long,
+// n.keyAt(i), runtime.getVMConfig().classMirrorOffset, Long.SIZE);
+// data[i] = new KeyData(key, n.keyProbability(i), n.keySuccessorIndex(i));
+// }
+//
+// n.graph().getDebug().forceDump(n.graph(), "before");
+//
+// n.replaceAndDelete(n.graph().add(IntegerSwitchNode.create(n.value(),
+// n.successors().snapshot().toArray(new AbstractBeginNode[0]), data)));
+//
+// n.graph().getDebug().forceDump(n.graph(), "after");
+// }
     }
 
     private static void lowerComputeObjectAddressNode(ComputeObjectAddressNode n) {

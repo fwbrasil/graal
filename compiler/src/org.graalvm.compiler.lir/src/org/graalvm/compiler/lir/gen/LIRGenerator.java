@@ -470,10 +470,12 @@ public abstract class LIRGenerator implements LIRGeneratorTool {
          * tableswitch is preferred if better than a certain value that starts at 0.5 and lowers
          * gradually with additional effort.
          */
-        if (strategy.getAverageEffort() < 4d || (tableSwitchDensity < minDensity && hashTableSwitchDensity < minDensity)) {
+        if ((strategy.getAverageEffort() < (4d - tableSwitchBonus) || (tableSwitchDensity < minDensity && hashTableSwitchDensity < minDensity))) {
+            System.out.println("Strategy " + strategy);
             emitStrategySwitch(strategy, value, keyTargets, defaultTarget);
         } else {
-            if (hashTableSwitchDensity > tableSwitchDensity) {
+            if (keyConstants[0].getJavaKind() == JavaKind.Long && hashTableSwitchDensity > tableSwitchDensity) {
+                System.out.println("Hash switch ");
                 Hasher h = hasher.get();
                 int cardinality = h.cardinality();
                 LabelRef[] targets = new LabelRef[cardinality];
@@ -489,16 +491,16 @@ public abstract class LIRGenerator implements LIRGeneratorTool {
                 }
                 emitHashTableSwitch(hasher.get(), keys, defaultTarget, targets, value);
             } else {
-                int minValue = keyConstants[0].asInt();
+                System.out.println("table switch ");
                 assert valueRange < Integer.MAX_VALUE;
                 LabelRef[] targets = new LabelRef[(int) valueRange];
                 for (int i = 0; i < valueRange; i++) {
                     targets[i] = defaultTarget;
                 }
                 for (int i = 0; i < keyCount; i++) {
-                    targets[keyConstants[i].asInt() - minValue] = keyTargets[i];
+                    targets[(int) (keyConstants[i].asLong() - keyConstants[0].asLong())] = keyTargets[i];
                 }
-                emitTableSwitch(minValue, defaultTarget, targets, value);
+                emitTableSwitch(keyConstants[0], defaultTarget, targets, value);
             }
         }
     }
@@ -506,7 +508,7 @@ public abstract class LIRGenerator implements LIRGeneratorTool {
     @Override
     public abstract void emitStrategySwitch(SwitchStrategy strategy, Variable key, LabelRef[] keyTargets, LabelRef defaultTarget);
 
-    protected abstract void emitTableSwitch(int lowKey, LabelRef defaultTarget, LabelRef[] targets, Value key);
+    protected abstract void emitTableSwitch(JavaConstant lowKey, LabelRef defaultTarget, LabelRef[] targets, Value key);
 
     @SuppressWarnings("unused")
     protected Optional<Hasher> hasherFor(JavaConstant[] keyConstants, double minDensity) {

@@ -53,6 +53,8 @@ public final class Hasher {
     public static Optional<Hasher> forKeys(JavaConstant[] keys, double minDensity) {
         if (keys.length <= 2) {
             return Optional.empty();
+        } else if (keys[keys.length - 1].asLong() - keys[0].asLong() > Integer.MAX_VALUE) {
+            return Optional.empty();
         } else {
             int maxCardinality = (int) Math.round(keys.length / minDensity);
             assertSorted(keys);

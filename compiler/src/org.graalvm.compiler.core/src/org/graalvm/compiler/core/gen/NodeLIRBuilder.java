@@ -33,8 +33,12 @@ import static org.graalvm.compiler.core.common.GraalOptions.MatchExpressions;
 import static org.graalvm.compiler.debug.DebugOptions.LogVerbose;
 import static org.graalvm.compiler.lir.LIR.verifyBlock;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 
 import org.graalvm.collections.EconomicMap;
@@ -100,6 +104,8 @@ import org.graalvm.compiler.nodes.cfg.Block;
 import org.graalvm.compiler.nodes.cfg.ControlFlowGraph;
 import org.graalvm.compiler.nodes.extended.IntegerSwitchNode;
 import org.graalvm.compiler.nodes.extended.SwitchNode;
+import org.graalvm.compiler.nodes.extended.IntegerSwitchNode.KeyData;
+import org.graalvm.compiler.nodes.java.TypeSwitchNode;
 import org.graalvm.compiler.nodes.spi.LIRLowerable;
 import org.graalvm.compiler.nodes.spi.NodeLIRBuilderTool;
 import org.graalvm.compiler.nodes.spi.NodeValueMap;
@@ -113,6 +119,7 @@ import jdk.vm.ci.meta.AllocatableValue;
 import jdk.vm.ci.meta.Constant;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
+import jdk.vm.ci.meta.MemoryAccessProvider;
 import jdk.vm.ci.meta.PlatformKind;
 import jdk.vm.ci.meta.Value;
 
@@ -660,6 +667,7 @@ public abstract class NodeLIRBuilder implements NodeLIRBuilderTool, LIRGeneratio
      */
     @Override
     public void emitSwitch(SwitchNode x) {
+
         assert x.defaultSuccessor() != null;
         LabelRef defaultTarget = getLIRBlock(x.defaultSuccessor());
         int keyCount = x.keyCount();
@@ -686,6 +694,65 @@ public abstract class NodeLIRBuilder implements NodeLIRBuilderTool, LIRGeneratio
                     assert keyConstants[i].getJavaKind() == keyKind;
                 }
                 gen.emitStrategySwitch(keyConstants, keyProbabilities, keyTargets, defaultTarget, value);
+            } else if (x instanceof TypeSwitchNode && x.graph().toString().contains("doItOuter")) {
+                TypeSwitchNode n = (TypeSwitchNode) x;
+                KeyData[] data = new KeyData[keyCount];
+
+                MemoryAccessProvider memory = gen.getProviders().getConstantReflection().getMemoryAccessProvider();
+
+// int classMirrorOffset;
+// try {
+// Field f = memory.getClass().getDeclaredField("runtime");
+// f.setAccessible(true);
+// Object r = f.get(memory);
+// Field c = r.getClass().getDeclaredField("config");
+// c.setAccessible(true);
+// Object cfg = c.get(r);
+// Field m = cfg.getClass().getDeclaredField("classMirrorOffset");
+// m.setAccessible(true);
+// classMirrorOffset = (int) m.get(cfg);
+// } catch (NoSuchFieldException | SecurityException | IllegalArgumentException |
+// IllegalAccessException e) {
+// throw new RuntimeException(e);
+// }
+
+                for (int i = 0; i < keyCount; i++) {
+                    Constant k = n.keyAt(i);
+                    try {
+                        Field m = k.getClass().getDeclaredField("metaspaceObject");  // getMetaspacePointer
+                        m.setAccessible(true);
+                        Object obj = m.get(k);
+                        Method g = obj.getClass().getMethod("getMetaspacePointer");
+                        g.setAccessible(true);
+                        long addr = (long) g.invoke(obj);
+                        JavaConstant key = JavaConstant.forLong(addr);// memory.readPrimitiveConstant(JavaKind.Long,
+                                                                      // k, 0, Long.SIZE);
+                        data[i] = new KeyData(key, n.keyProbability(i), n.keySuccessorIndex(i));
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+
+                Arrays.sort(data, new Comparator<KeyData>() {
+                    @Override
+                    public int compare(KeyData o1, KeyData o2) {
+                        return (int) (o1.key.asLong() - o2.key.asLong());
+                    }
+                });
+                JavaConstant[] keys = new JavaConstant[data.length];
+                double[] keyProbabilities = new double[data.length];
+                LabelRef[] keyTargets = new LabelRef[keyCount];
+
+                for (int i = 0; i < data.length; i++) {
+                    KeyData d = data[i];
+                    keys[i] = d.key;
+                    keyProbabilities[i] = d.keyProbability;
+                    keyTargets[i] = getLIRBlock(n.keySuccessor(d.keySuccessor));
+                }
+
+                if (x.graph().toString().contains("doItOuter"))
+                    System.out.println(1);
+                gen.emitStrategySwitch(keys, keyProbabilities, keyTargets, defaultTarget, value);
             } else {
                 // keyKind != JavaKind.Int || !x.isSorted()
                 LabelRef[] keyTargets = new LabelRef[keyCount];

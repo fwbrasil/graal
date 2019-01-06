@@ -51,6 +51,7 @@ import org.graalvm.compiler.options.OptionValues;
 import jdk.vm.ci.code.Architecture;
 import jdk.vm.ci.meta.Assumptions;
 import jdk.vm.ci.meta.ConstantReflectionProvider;
+import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.MetaAccessProvider;
 
 /**
@@ -248,7 +249,7 @@ public class SimplifyingGraphDecoder extends GraphDecoder {
             return arrayLengthNode.canonical(canonicalizerTool);
         } else if (node instanceof IntegerSwitchNode && ((IntegerSwitchNode) node).value().isConstant()) {
             IntegerSwitchNode switchNode = (IntegerSwitchNode) node;
-            int value = switchNode.value().asJavaConstant().asInt();
+            JavaConstant value = switchNode.value().asJavaConstant();
             AbstractBeginNode survivingSuccessor = switchNode.successorAtKey(value);
             List<Node> allSuccessors = switchNode.successors().snapshot();
 
