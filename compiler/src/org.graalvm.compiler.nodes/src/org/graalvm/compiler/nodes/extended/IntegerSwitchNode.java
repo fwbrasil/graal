@@ -66,15 +66,47 @@ import jdk.vm.ci.meta.JavaKind;
 public final class IntegerSwitchNode extends SwitchNode implements LIRLowerable, Simplifiable {
     public static final NodeClass<IntegerSwitchNode> TYPE = NodeClass.create(IntegerSwitchNode.class);
 
-    protected final int[] keys;
+    protected final JavaConstant[] keys;
 
-    public IntegerSwitchNode(ValueNode value, AbstractBeginNode[] successors, int[] keys, double[] keyProbabilities, int[] keySuccessors) {
+    public static IntegerSwitchNode create(ValueNode value, AbstractBeginNode[] successors, KeyData[] data) {
+        Arrays.sort(data, new Comparator<KeyData>() {
+            @Override
+            public int compare(KeyData o1, KeyData o2) {
+                return (int) (o1.key.asLong() - o2.key.asLong());
+            }
+        });
+        JavaConstant[] keys = new JavaConstant[data.length];
+        double[] keyProbabilities = new double[data.length];
+        int[] keySuccessors = new int[data.length];
+
+        for (int i = 0; i < data.length; i++) {
+            KeyData d = data[i];
+            keys[i] = d.key;
+            keyProbabilities[i] = d.keyProbability;
+            keySuccessors[i] = d.keySuccessor;
+        }
+        return new IntegerSwitchNode(value, successors, keys, keyProbabilities, keySuccessors);
+    }
+
+    public IntegerSwitchNode(ValueNode value, AbstractBeginNode[] successors, JavaConstant[] keys, double[] keyProbabilities, int[] keySuccessors) {
         super(TYPE, value, successors, keySuccessors, keyProbabilities);
         assert keySuccessors.length == keys.length + 1;
         assert keySuccessors.length == keyProbabilities.length;
         this.keys = keys;
         assert value.stamp(NodeView.DEFAULT) instanceof PrimitiveStamp && value.stamp(NodeView.DEFAULT).getStackKind().isNumericInteger();
         assert assertSorted();
+    }
+
+    public IntegerSwitchNode(ValueNode value, AbstractBeginNode[] successors, int[] keys, double[] keyProbabilities, int[] keySuccessors) {
+        this(value, successors, toConstants(keys), keyProbabilities, keySuccessors);
+    }
+
+    public IntegerSwitchNode(ValueNode value, int successorCount, int[] keys, double[] keyProbabilities, int[] keySuccessors) {
+        this(value, successorCount, toConstants(keys), keyProbabilities, keySuccessors);
+    }
+
+    public IntegerSwitchNode(ValueNode value, int successorCount, JavaConstant[] keys, double[] keyProbabilities, int[] keySuccessors) {
+        this(value, new AbstractBeginNode[successorCount], keys, keyProbabilities, keySuccessors);
     }
 
     private boolean assertSorted() {

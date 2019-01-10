@@ -641,8 +641,9 @@ public abstract class AMD64LIRGenerator extends LIRGenerator {
     }
 
     @Override
-    protected void emitTableSwitch(int lowKey, LabelRef defaultTarget, LabelRef[] targets, Value key) {
-        append(new TableSwitchOp(lowKey, defaultTarget, targets, key, newVariable(LIRKind.value(target().arch.getWordKind())), newVariable(key.getValueKind())));
+    protected void emitTableSwitch(JavaConstant lowKey, LabelRef defaultTarget, LabelRef[] targets, Value key) {
+        Value index = arithmeticLIRGen.emitNarrow(arithmeticLIRGen.emitSub(key, emitLoadConstant(key.getValueKind(), lowKey), false), AMD64Kind.DWORD.getSizeInBytes());
+        append(new TableSwitchOp(lowKey, defaultTarget, targets, index, newVariable(LIRKind.value(target().arch.getWordKind())), newVariable(index.getValueKind())));
     }
 
     @Override
@@ -652,10 +653,13 @@ public abstract class AMD64LIRGenerator extends LIRGenerator {
 
     @Override
     protected void emitHashTableSwitch(Hasher hasher, JavaConstant[] keys, LabelRef defaultTarget, LabelRef[] targets, Value value) {
-        Value index = hasher.hash(value, arithmeticLIRGen);
+        Value hash = arithmeticLIRGen.emitNarrow(hasher.gen(value, arithmeticLIRGen), AMD64Kind.DWORD.getSizeInBytes());
         Variable scratch = newVariable(LIRKind.value(target().arch.getWordKind()));
-        Variable entryScratch = newVariable(LIRKind.value(target().arch.getWordKind()));
-        append(new HashTableSwitchOp(keys, defaultTarget, targets, value, index, scratch, entryScratch));
+        Variable idxScratch = newVariable(LIRKind.value(AMD64Kind.DWORD));
+        Variable valueScratch = newVariable(LIRKind.value(AMD64Kind.DWORD));
+        Value n = arithmeticLIRGen.emitNarrow(arithmeticLIRGen.emitSub(value, emitLoadConstant(value.getValueKind(), keys[0]), false), AMD64Kind.DWORD.getSizeInBytes());
+
+        append(new HashTableSwitchOp(keys, defaultTarget, targets, n, hash, scratch, idxScratch, valueScratch));
     }
 
     @Override

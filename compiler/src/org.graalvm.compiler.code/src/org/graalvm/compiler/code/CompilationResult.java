@@ -135,19 +135,19 @@ public class CompilationResult {
         /**
          * The low value in the key range (inclusive).
          */
-        public final int low;
+        public final long low;
 
         /**
          * The high value in the key range (inclusive).
          */
-        public final int high;
+        public final long high;
 
         /**
          * The size (in bytes) of each table entry.
          */
         public final int entrySize;
 
-        public JumpTable(int position, int low, int high, int entrySize) {
+        public JumpTable(int position, long low, long high, int entrySize) {
             super(position);
             this.low = low;
             this.high = high;

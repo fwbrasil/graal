@@ -231,14 +231,14 @@ public class AMD64ControlFlow {
 
     public static final class TableSwitchOp extends AMD64BlockEndOp {
         public static final LIRInstructionClass<TableSwitchOp> TYPE = LIRInstructionClass.create(TableSwitchOp.class);
-        private final int lowKey;
+        private final JavaConstant lowKey;
         private final LabelRef defaultTarget;
         private final LabelRef[] targets;
         @Use protected Value index;
         @Temp({REG, HINT}) protected Value idxScratch;
         @Temp protected Value scratch;
 
-        public TableSwitchOp(final int lowKey, final LabelRef defaultTarget, final LabelRef[] targets, Value index, Variable scratch, Variable idxScratch) {
+        public TableSwitchOp(final JavaConstant lowKey, final LabelRef defaultTarget, final LabelRef[] targets, Value index, Variable scratch, Variable idxScratch) {
             super(TYPE);
             this.lowKey = lowKey;
             this.defaultTarget = defaultTarget;
@@ -258,18 +258,10 @@ public class AMD64ControlFlow {
                 masm.movl(idxScratchReg, indexReg);
             }
 
-            // Compare index against jump table bounds
-            int highKey = lowKey + targets.length - 1;
-            if (lowKey != 0) {
-                // subtract the low value from the switch value
-                masm.subl(idxScratchReg, lowKey);
-                masm.cmpl(idxScratchReg, highKey - lowKey);
-            } else {
-                masm.cmpl(idxScratchReg, highKey);
-            }
-
             // Jump to default target if index is not within the jump table
             if (defaultTarget != null) {
+                // Compare index against jump table bounds
+                masm.cmpl(idxScratchReg, targets.length - 1);
                 masm.jcc(ConditionFlag.Above, defaultTarget.label());
             }
 
@@ -307,7 +299,7 @@ public class AMD64ControlFlow {
                 }
             }
 
-            JumpTable jt = new JumpTable(jumpTablePos, lowKey, highKey, 4);
+            JumpTable jt = new JumpTable(jumpTablePos, lowKey.asLong(), lowKey.asLong() + targets.length - 1, 4);
             crb.compilationResult.addAnnotation(jt);
         }
     }

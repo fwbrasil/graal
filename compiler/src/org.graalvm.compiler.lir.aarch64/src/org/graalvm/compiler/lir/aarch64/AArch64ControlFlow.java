@@ -320,9 +320,9 @@ public class AArch64ControlFlow {
         @Temp({REG, HINT}) protected Value idxScratch;
         @Temp protected Value scratch;
 
-        public TableSwitchOp(final int lowKey, final LabelRef defaultTarget, final LabelRef[] targets, Value index, Variable scratch, Variable idxScratch) {
+        public TableSwitchOp(final JavaConstant lowKey, final LabelRef defaultTarget, final LabelRef[] targets, Value index, Variable scratch, Variable idxScratch) {
             super(TYPE);
-            this.lowKey = lowKey;
+            this.lowKey = lowKey.asInt();
             this.defaultTarget = defaultTarget;
             this.targets = targets;
             this.index = index;

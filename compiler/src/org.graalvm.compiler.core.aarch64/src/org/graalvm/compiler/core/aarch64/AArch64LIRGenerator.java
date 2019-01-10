@@ -468,7 +468,7 @@ public abstract class AArch64LIRGenerator extends LIRGenerator {
     }
 
     @Override
-    protected void emitTableSwitch(int lowKey, LabelRef defaultTarget, LabelRef[] targets, Value key) {
+    protected void emitTableSwitch(JavaConstant lowKey, LabelRef defaultTarget, LabelRef[] targets, Value key) {
         append(new TableSwitchOp(lowKey, defaultTarget, targets, key, newVariable(LIRKind.value(target().arch.getWordKind())), newVariable(key.getValueKind())));
     }
 
