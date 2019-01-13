@@ -37,8 +37,7 @@ import jdk.vm.ci.meta.JavaConstant;
 
 /**
  * This class encapsulates different strategies on how to generate code for switch instructions.
- *
- * The {@link #getBestStrategy(double[], JavaConstant[], LabelRef[])} method can be used to get
+ * TODO The {@link #getStrategies(double[], JavaConstant[], LabelRef[])} method can be used to get
  * strategy with the smallest average effort (average number of comparisons until a decision is
  * reached). The strategy returned by this method will have its averageEffort set, while a strategy
  * constructed directly will not.
@@ -161,6 +160,7 @@ public abstract class SwitchStrategy {
 
         private int defaultEffort;
         private int defaultCount;
+        private int numberOfInstructions = 0;
         private final int[] keyEfforts = new int[keyProbabilities.length];
         private final int[] keyCounts = new int[keyProbabilities.length];
         private final LabelRef[] keyTargets;
@@ -169,30 +169,48 @@ public abstract class SwitchStrategy {
             this.keyTargets = keyTargets;
         }
 
+        private void conditionalJump(Condition condition) {
+            if (condition != null) {
+                numberOfInstructions++; // compare
+            }
+            jump();
+        }
+
+        private void jump() {
+            numberOfInstructions++;
+        }
+
         @Override
         public void conditionalJump(int index, Condition condition, boolean defaultTarget) {
-            // nothing to do
+            conditionalJump(condition);
         }
 
         @Override
         public void conditionalJumpOrDefault(int index, Condition condition, boolean canFallThrough) {
-            // nothing to do
+            conditionalJump(condition);
+            if (!canFallThrough) {
+                jump(); // default target jump
+            }
         }
 
         @Override
         public Label conditionalJump(int index, Condition condition) {
-            // nothing to do
+            conditionalJump(condition);
             return null;
         }
 
         @Override
         public void bind(Label label) {
-            // nothing to do
+            numberOfInstructions++;
         }
 
         @Override
         public boolean isSameTarget(int index1, int index2) {
             return keyTargets[index1] == keyTargets[index2];
+        }
+
+        public int getCodeSizeEstimate() {
+            return numberOfInstructions * 4;
         }
 
         public double getAverageEffort() {
@@ -208,6 +226,7 @@ public abstract class SwitchStrategy {
 
     public final double[] keyProbabilities;
     private double averageEffort = -1;
+    private int codeSizeEstimate = -1;
     private EffortClosure effortClosure;
 
     public SwitchStrategy(double[] keyProbabilities) {
@@ -220,6 +239,11 @@ public abstract class SwitchStrategy {
     public double getAverageEffort() {
         assert averageEffort >= 0 : "average effort was not calculated yet for this strategy";
         return averageEffort;
+    }
+
+    public int getCodeSizeEstimate() {
+        assert codeSizeEstimate >= 0 : "code size estimate was not calculated yet for this strategy";
+        return codeSizeEstimate;
     }
 
     /**
@@ -248,7 +272,7 @@ public abstract class SwitchStrategy {
 
     @Override
     public String toString() {
-        return getClass().getSimpleName() + "[avgEffort=" + averageEffort + "]";
+        return getClass().getSimpleName() + "[avgEffort=" + averageEffort + ", codeSizeEstimate=" + codeSizeEstimate + "]";
     }
 
     /**
@@ -499,32 +523,16 @@ public abstract class SwitchStrategy {
 
     public abstract void run(SwitchClosure closure);
 
-    private static SwitchStrategy[] getStrategies(double[] keyProbabilities, JavaConstant[] keyConstants, LabelRef[] keyTargets) {
+    public static SwitchStrategy[] getStrategies(double[] keyProbabilities, JavaConstant[] keyConstants, LabelRef[] keyTargets) {
         SwitchStrategy[] strategies = new SwitchStrategy[]{new SequentialStrategy(keyProbabilities, keyConstants), new RangesStrategy(keyProbabilities, keyConstants),
                         new BinaryStrategy(keyProbabilities, keyConstants)};
         for (SwitchStrategy strategy : strategies) {
             strategy.effortClosure = strategy.new EffortClosure(keyTargets);
             strategy.run(strategy.effortClosure);
             strategy.averageEffort = strategy.effortClosure.getAverageEffort();
+            strategy.codeSizeEstimate = strategy.effortClosure.getCodeSizeEstimate();
             strategy.effortClosure = null;
         }
         return strategies;
-    }
-
-    /**
-     * Creates all switch strategies for the given switch, evaluates them (based on average effort)
-     * and returns the best one.
-     */
-    public static SwitchStrategy getBestStrategy(double[] keyProbabilities, JavaConstant[] keyConstants, LabelRef[] keyTargets) {
-        SwitchStrategy[] strategies = getStrategies(keyProbabilities, keyConstants, keyTargets);
-        double bestEffort = Integer.MAX_VALUE;
-        SwitchStrategy bestStrategy = null;
-        for (SwitchStrategy strategy : strategies) {
-            if (strategy.getAverageEffort() < bestEffort) {
-                bestEffort = strategy.getAverageEffort();
-                bestStrategy = strategy;
-            }
-        }
-        return bestStrategy;
     }
 }

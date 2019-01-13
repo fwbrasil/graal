@@ -36,6 +36,7 @@ import static org.graalvm.compiler.lir.LIRValueUtil.isVirtualStackSlot;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.graalvm.compiler.asm.Label;
 import org.graalvm.compiler.core.common.LIRKind;
@@ -59,9 +60,9 @@ import org.graalvm.compiler.lir.StandardOp;
 import org.graalvm.compiler.lir.StandardOp.BlockEndOp;
 import org.graalvm.compiler.lir.StandardOp.LabelOp;
 import org.graalvm.compiler.lir.StandardOp.SaveRegistersOp;
-import org.graalvm.compiler.lir.hashing.Hasher;
 import org.graalvm.compiler.lir.SwitchStrategy;
 import org.graalvm.compiler.lir.Variable;
+import org.graalvm.compiler.lir.hashing.Hasher;
 import org.graalvm.compiler.options.Option;
 import org.graalvm.compiler.options.OptionKey;
 import org.graalvm.compiler.options.OptionType;
@@ -451,52 +452,39 @@ public abstract class LIRGenerator implements LIRGeneratorTool {
 
     @Override
     public void emitStrategySwitch(JavaConstant[] keyConstants, double[] keyProbabilities, LabelRef[] keyTargets, LabelRef defaultTarget, Variable value) {
-        SwitchStrategy strategy = SwitchStrategy.getBestStrategy(keyProbabilities, keyConstants, keyTargets);
+
+        List<SwitchGenerator> alternatives = new ArrayList<>();
+
+        for (SwitchStrategy strategy : SwitchStrategy.getStrategies(keyProbabilities, keyConstants, keyTargets)) {
+            alternatives.add(new SwitchGenerator.Strategy(this, strategy, keyConstants, keyTargets, defaultTarget, value));
+        }
+
+        alternatives.add(new SwitchGenerator.Table(this, keyConstants, keyTargets, defaultTarget, value));
 
         int keyCount = keyConstants.length;
-        double minDensity = 1 / Math.sqrt(strategy.getAverageEffort());
-        Optional<Hasher> hasher = hasherFor(keyConstants, minDensity);
-        double hashTableSwitchDensity = hasher.map(h -> keyCount / (double) h.cardinality()).orElse(0d);
         long valueRange = keyConstants[keyCount - 1].asLong() - keyConstants[0].asLong() + 1;
         double tableSwitchDensity = keyCount / (double) valueRange;
 
-        /*
-         * This heuristic tries to find a compromise between the effort for the best switch strategy
-         * and the density of a tableswitch. If the effort for the strategy is at least 4, then a
-         * tableswitch is preferred if better than a certain value that starts at 0.5 and lowers
-         * gradually with additional effort.
-         */
-        if (strategy.getAverageEffort() < 4d || (tableSwitchDensity < minDensity && hashTableSwitchDensity < minDensity)) {
-            emitStrategySwitch(strategy, value, keyTargets, defaultTarget);
-        } else {
-            if (hashTableSwitchDensity > tableSwitchDensity) {
-                Hasher h = hasher.get();
-                int cardinality = h.cardinality();
-                LabelRef[] targets = new LabelRef[cardinality];
-                JavaConstant[] keys = new JavaConstant[cardinality];
-                for (int i = 0; i < cardinality; i++) {
-                    keys[i] = JavaConstant.INT_0;
-                    targets[i] = defaultTarget;
-                }
-                for (int i = 0; i < keyCount; i++) {
-                    int idx = h.hash(keyConstants[i].asLong());
-                    keys[idx] = keyConstants[i];
-                    targets[idx] = keyTargets[i];
-                }
-                emitHashTableSwitch(hasher.get(), keys, defaultTarget, targets, value);
-            } else {
-                int minValue = keyConstants[0].asInt();
-                assert valueRange < Integer.MAX_VALUE;
-                LabelRef[] targets = new LabelRef[(int) valueRange];
-                for (int i = 0; i < valueRange; i++) {
-                    targets[i] = defaultTarget;
-                }
-                for (int i = 0; i < keyCount; i++) {
-                    targets[keyConstants[i].asInt() - minValue] = keyTargets[i];
-                }
-                emitTableSwitch(minValue, defaultTarget, targets, value);
-            }
-        }
+        // hashing only makes sense if it has higher density than the regular table switch
+        hasherFor(keyConstants, tableSwitchDensity).ifPresent(hasher -> {
+            alternatives.add(new SwitchGenerator.HashTable(this, hasher, keyConstants, keyTargets, defaultTarget, value));
+        });
+
+        SwitchGenerator smallest = alternatives.stream().min((a1, a2) -> a1.getCodeSizeEstimate() - a2.getCodeSizeEstimate()).get();
+
+        List<SwitchGenerator> aa = alternatives.stream().sorted((a1, a2) -> Double.compare(a1.getAverageEffort(), a2.getAverageEffort())).filter(
+                        a -> a.getAverageEffort() <= smallest.getAverageEffort()).filter(
+                                        a -> {
+                                            double sa = smallest.getAverageEffort();
+                                            double sb = a.getAverageEffort();
+                                            double sqrt = 1 + Math.sqrt(sa - sb);
+                                            int codeSizeEstimate = smallest.getCodeSizeEstimate();
+                                            double maxCodeSize = codeSizeEstimate * sqrt;
+                                            return a.getCodeSizeEstimate() <= maxCodeSize;
+                                        }).collect(Collectors.toList());
+        SwitchGenerator best = aa.get(0);
+        System.out.println(aa);
+        best.emit();
     }
 
     @Override
