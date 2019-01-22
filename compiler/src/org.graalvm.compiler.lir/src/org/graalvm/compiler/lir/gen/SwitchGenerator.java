@@ -70,12 +70,15 @@ abstract class SwitchGenerator {
 
         @Override
         public double getAverageEffort() {
-            return 4D + hasher.effort() / 10;
+            return 4D + Math.sqrt(hasher.effort());
         }
 
         @Override
         public int getCodeSizeEstimate() {
-            return (8 * 4) + 8 * keyConstants.length;
+            // read table entry, compare value, calc jump address, jump
+            int instructions = 8 * 4;
+            int table = 8 * keyConstants.length;
+            return instructions + table;
         }
 
         @Override
@@ -118,7 +121,9 @@ abstract class SwitchGenerator {
 
         @Override
         public int getCodeSizeEstimate() {
-            return (int) ((8 * 4) + 4 * valueRange);
+            int instructions = 8 * 4;
+            int table = (int) (4 * valueRange);
+            return instructions + table;
         }
 
         @Override

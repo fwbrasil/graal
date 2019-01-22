@@ -470,21 +470,25 @@ public abstract class LIRGenerator implements LIRGeneratorTool {
             alternatives.add(new SwitchGenerator.HashTable(this, hasher, keyConstants, keyTargets, defaultTarget, value));
         });
 
-        SwitchGenerator smallest = alternatives.stream().min((a1, a2) -> a1.getCodeSizeEstimate() - a2.getCodeSizeEstimate()).get();
+        alternatives.get(alternatives.size() - 1).emit();
 
-        List<SwitchGenerator> aa = alternatives.stream().sorted((a1, a2) -> Double.compare(a1.getAverageEffort(), a2.getAverageEffort())).filter(
-                        a -> a.getAverageEffort() <= smallest.getAverageEffort()).filter(
-                                        a -> {
-                                            double sa = smallest.getAverageEffort();
-                                            double sb = a.getAverageEffort();
-                                            double sqrt = 1 + Math.sqrt(sa - sb);
-                                            int codeSizeEstimate = smallest.getCodeSizeEstimate();
-                                            double maxCodeSize = codeSizeEstimate * sqrt;
-                                            return a.getCodeSizeEstimate() <= maxCodeSize;
-                                        }).collect(Collectors.toList());
-        SwitchGenerator best = aa.get(0);
-        System.out.println(aa);
-        best.emit();
+// SwitchGenerator smallest = alternatives.stream().min((a1, a2) -> a1.getCodeSizeEstimate() -
+// a2.getCodeSizeEstimate()).get();
+//
+// List<SwitchGenerator> aa = alternatives.stream().sorted((a1, a2) ->
+// Double.compare(a1.getAverageEffort(), a2.getAverageEffort())).filter(
+// a -> a.getAverageEffort() <= smallest.getAverageEffort()).filter(
+// a -> {
+// double sa = smallest.getAverageEffort();
+// double sb = a.getAverageEffort();
+// double sqrt = 1 + Math.sqrt(sa - sb);
+// int codeSizeEstimate = smallest.getCodeSizeEstimate();
+// double maxCodeSize = codeSizeEstimate * sqrt;
+// return a.getCodeSizeEstimate() <= maxCodeSize;
+// }).collect(Collectors.toList());
+// SwitchGenerator best = aa.get(0);
+//// System.out.println(aa);
+// best.emit();
     }
 
     @Override

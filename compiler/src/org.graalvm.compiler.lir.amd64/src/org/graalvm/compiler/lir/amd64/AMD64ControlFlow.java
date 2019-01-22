@@ -248,6 +248,30 @@ public class AMD64ControlFlow {
             this.idxScratch = idxScratch;
         }
 
+        public static int codeSize(final int lowKey, final LabelRef defaultTarget, final LabelRef[] targets) {
+            int size = 0;
+            if (lowKey != 0) {
+                size += 3; // subl
+            }
+            size += 3; // compl
+
+            if (defaultTarget != null) {
+                size += 6; // jcc
+            }
+
+            size += 7; // leaq
+            size += 4; // movslq
+            size += 3; // addq
+            size += 3; // jmp
+            size += 2; // align
+            size += 4; // emitInt
+
+            for (LabelRef target : targets) {
+                size += 3; // emitInt
+            }
+            return size;
+        }
+
         @Override
         public void emitCode(CompilationResultBuilder crb, AMD64MacroAssembler masm) {
             Register indexReg = asRegister(index, AMD64Kind.DWORD);
@@ -258,38 +282,58 @@ public class AMD64ControlFlow {
                 masm.movl(idxScratchReg, indexReg);
             }
 
+            int pos = 0;
+
             // Compare index against jump table bounds
             int highKey = lowKey + targets.length - 1;
             if (lowKey != 0) {
                 // subtract the low value from the switch value
+                pos = masm.position();
                 masm.subl(idxScratchReg, lowKey);
+                System.out.println("masm.subl" + (masm.position() - pos));
+                pos = masm.position();
                 masm.cmpl(idxScratchReg, highKey - lowKey);
+                System.out.println("masm.cmpl" + (masm.position() - pos));
             } else {
                 masm.cmpl(idxScratchReg, highKey);
             }
 
             // Jump to default target if index is not within the jump table
             if (defaultTarget != null) {
+                pos = masm.position();
                 masm.jcc(ConditionFlag.Above, defaultTarget.label());
+                System.out.println("masm.jcc" + (masm.position() - pos));
             }
 
             // Set scratch to address of jump table
+            pos = masm.position();
             masm.leaq(scratchReg, new AMD64Address(AMD64.rip, 0));
+            System.out.println("masm.leaq" + (masm.position() - pos));
             final int afterLea = masm.position();
 
             // Load jump table entry into scratch and jump to it
+            pos = masm.position();
             masm.movslq(idxScratchReg, new AMD64Address(scratchReg, idxScratchReg, Scale.Times4, 0));
+            System.out.println("masm.movslq" + (masm.position() - pos));
+            pos = masm.position();
             masm.addq(scratchReg, idxScratchReg);
+            System.out.println("masm.addq" + (masm.position() - pos));
+            pos = masm.position();
             masm.jmp(scratchReg);
+            System.out.println("masm.jmp" + (masm.position() - pos));
 
             // Inserting padding so that jump table address is 4-byte aligned
+            pos = masm.position();
             masm.align(4);
+            System.out.println("masm.align" + (masm.position() - pos));
 
             // Patch LEA instruction above now that we know the position of the jump table
             // this is ugly but there is no better way to do this given the assembler API
             final int jumpTablePos = masm.position();
             final int leaDisplacementPosition = afterLea - 4;
+            pos = masm.position();
             masm.emitInt(jumpTablePos - afterLea, leaDisplacementPosition);
+            System.out.println("masm.emitInt" + (masm.position() - pos));
 
             // Emit jump table entries
             for (LabelRef target : targets) {
@@ -300,10 +344,11 @@ public class AMD64ControlFlow {
                     masm.emitInt(imm32);
                 } else {
                     label.addPatchAt(masm.position());
-
+                    pos = masm.position();
                     masm.emitByte(0); // pseudo-opcode for jump table entry
                     masm.emitShort(offsetToJumpTableBase);
                     masm.emitByte(0); // padding to make jump table entry 4 bytes wide
+                    System.out.println("entry" + (masm.position() - pos));
                 }
             }
 
@@ -333,13 +378,47 @@ public class AMD64ControlFlow {
             this.entryScratch = entryScratch;
         }
 
+        public static int codeSize(final LabelRef defaultTarget, final LabelRef[] targets) {
+            int size = 0;
+            size += 7; // leaq
+
+            if (defaultTarget != null) {
+                size += 4; // movq
+                size += 3; // compl
+                size += 6; // jcc
+                size += 4; // shrq
+            } else {
+                size += 4; // movslq
+            }
+
+            size += 3; // addq
+            size += 3; // jmp
+
+            if (defaultTarget != null) {
+                size += 0; // align(8)
+            } else {
+                size += 2; // align(4)
+            }
+
+            size += 4; // emitInt
+
+            for (int i = 0; i < targets.length; i++) {
+                if (defaultTarget != null) {
+                    size += 4; // emitInt
+                }
+                size += 4; // emitInt
+            }
+
+            return size;
+        }
+
         @Override
         public void emitCode(CompilationResultBuilder crb, AMD64MacroAssembler masm) {
             Register valueReg = asRegister(value, AMD64Kind.DWORD);
             Register indexReg = asRegister(hash, AMD64Kind.DWORD);
             Register scratchReg = asRegister(scratch, AMD64Kind.QWORD);
             Register entryScratchReg = asRegister(entryScratch, AMD64Kind.QWORD);
-
+            int pos = 0;
             // Set scratch to address of jump table
             masm.leaq(scratchReg, new AMD64Address(AMD64.rip, 0));
             final int afterLea = masm.position();
@@ -349,15 +428,19 @@ public class AMD64ControlFlow {
             if (defaultTarget != null) {
 
                 // Move the table entry (two DWORDs) into a QWORD
+                pos = masm.position();
                 masm.movq(entryScratchReg, new AMD64Address(scratchReg, indexReg, Scale.Times8, 0));
+                System.out.println("movq" + (masm.position() - pos));
 
                 // Jump to the default target if the first DWORD (original key) doesn't match the
                 // current key. Accounts for hash collisions with unknown keys
                 masm.cmpl(entryScratchReg, valueReg);
                 masm.jcc(ConditionFlag.NotEqual, defaultTarget.label());
 
+                pos = masm.position();
                 // Shift to the second DWORD
                 masm.shrq(entryScratchReg, 32);
+                System.out.println("shrq" + (masm.position() - pos));
             } else {
 
                 // The jump table has a single DWORD with the label address if there's no
@@ -369,7 +452,9 @@ public class AMD64ControlFlow {
 
             // Inserting padding so that jump the table address is aligned
             if (defaultTarget != null) {
+                pos = masm.position();
                 masm.align(8);
+                System.out.println("align(8)" + (masm.position() - pos));
             } else {
                 masm.align(4);
             }
