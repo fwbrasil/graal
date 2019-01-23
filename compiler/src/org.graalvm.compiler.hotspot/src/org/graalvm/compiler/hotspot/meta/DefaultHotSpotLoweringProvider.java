@@ -59,7 +59,7 @@ import org.graalvm.compiler.graph.Node;
 import org.graalvm.compiler.graph.NodeInputList;
 import org.graalvm.compiler.hotspot.GraalHotSpotVMConfig;
 import org.graalvm.compiler.hotspot.HotSpotGraalRuntimeProvider;
-import org.graalvm.compiler.hotspot.meta.invoke.MethodOffsetStrategy;
+import org.graalvm.compiler.hotspot.meta.invokeinterface.InvokeInterfaceStrategy;
 import org.graalvm.compiler.hotspot.nodes.BeginLockScopeNode;
 import org.graalvm.compiler.hotspot.nodes.G1ArrayRangePostWriteBarrier;
 import org.graalvm.compiler.hotspot.nodes.G1ArrayRangePreWriteBarrier;
@@ -492,7 +492,19 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
 
                 JavaKind wordKind = runtime.getTarget().wordJavaKind;
                 ValueNode hub = createReadHub(graph, receiver, tool);
-                Optional<ValueNode> offset = MethodOffsetStrategy.resolve(graph, hub, invoke, config, target, constantReflection, tool, receiver, metaAccess);
+                HotSpotResolvedJavaMethod hsMethod = (HotSpotResolvedJavaMethod) callTarget.targetMethod();
+
+                boolean dump = false;
+                Optional<ValueNode> offset;
+                if (hsMethod.isInVirtualMethodTable(invoke.getReceiverType())) {
+                    offset = Optional.of(ConstantNode.forIntegerKind(target.wordJavaKind, hsMethod.vtableEntryOffset(invoke.getReceiverType()), graph));
+                } else {
+                    dump = true;
+                    offset = InvokeInterfaceStrategy.resolve(graph, hub, invoke, config, target, constantReflection, tool, receiver, metaAccess);
+                }
+
+                if (offset == null)
+                    System.out.println(1);
 
                 if (offset.isPresent()) {
                     ReadNode metaspaceMethod = createReadVirtualMethod(graph, hub, offset.get());
@@ -509,6 +521,8 @@ public class DefaultHotSpotLoweringProvider extends DefaultJavaLoweringProvider 
 
                     graph.addBeforeFixed(invoke.asNode(), metaspaceMethod);
                     graph.addAfterFixed(metaspaceMethod, compiledEntry);
+                    if (dump)
+                        graph.getDebug().forceDump(graph, "adsjlhjlk");
                 }
             }
 

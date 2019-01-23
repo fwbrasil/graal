@@ -1,4 +1,4 @@
-package org.graalvm.compiler.hotspot.meta.invoke;
+package org.graalvm.compiler.hotspot.meta.invokeinterface;
 
 import java.util.Arrays;
 import java.util.List;
@@ -11,7 +11,7 @@ import jdk.vm.ci.hotspot.HotSpotResolvedObjectType;
 import jdk.vm.ci.meta.JavaTypeProfile;
 import jdk.vm.ci.meta.JavaTypeProfile.ProfiledType;
 
-public class SingleMethodStrategy implements MethodOffsetStrategy {
+public class SingleMethodStrategy implements InvokeInterfaceStrategy {
 
     @Override
     public Optional<Evaluation> evaluate(Info info) {
@@ -20,25 +20,23 @@ public class SingleMethodStrategy implements MethodOffsetStrategy {
         int objectVtableLength = ((HotSpotResolvedObjectType) info.metaAccess.lookupJavaType(Object.class)).getVtableLength();
 
         boolean allSingleMethod = Arrays.stream(ptypes).allMatch(ptype -> ((HotSpotResolvedObjectType) ptype.getType()).getVtableLength() == objectVtableLength + 1);
-        Map<Integer, List<ProfiledType>> offsetMap = MethodOffsetStrategy.offsetMap(info, ptypes);
+        if (allSingleMethod)
+            System.out.println(1);
 
-        if (allSingleMethod && offsetMap != null && offsetMap.size() == 1 && ptypes.length > 0 && profile.getNotRecordedProbability() == 0D) {
+        if (allSingleMethod) {
+            return Optional.of(new Evaluation() {
 
-            System.out.println("SingleMethod " + offsetMap + " " + Arrays.asList(ptypes));
-            return Optional.empty();
-// return Optional.of(new Evaluation() {
-//
-// @Override
-// public int effort() {
-// return 0;
-// }
-//
-// @Override
-// public Optional<ValueNode> apply() {
-// return null;
-// }
-//
-// });
+                @Override
+                public int effort() {
+                    return 0;
+                }
+
+                @Override
+                public Optional<ValueNode> apply() {
+                    return Optional.empty();
+                }
+
+            });
         } else {
             return Optional.empty();
         }

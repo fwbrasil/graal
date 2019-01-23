@@ -1,14 +1,10 @@
-package org.graalvm.compiler.hotspot.meta.invoke;
+package org.graalvm.compiler.hotspot.meta.invokeinterface;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import org.graalvm.compiler.core.common.type.StampFactory;
-import org.graalvm.compiler.nodeinfo.NodeCycles;
 import org.graalvm.compiler.nodes.AbstractBeginNode;
 import org.graalvm.compiler.nodes.BeginNode;
 import org.graalvm.compiler.nodes.ConstantNode;
@@ -20,14 +16,13 @@ import org.graalvm.compiler.nodes.ValueNode;
 import org.graalvm.compiler.nodes.ValuePhiNode;
 import org.graalvm.compiler.nodes.java.TypeSwitchNode;
 
-import jdk.vm.ci.hotspot.HotSpotResolvedJavaMethod;
 import jdk.vm.ci.meta.DeoptimizationAction;
 import jdk.vm.ci.meta.DeoptimizationReason;
 import jdk.vm.ci.meta.JavaTypeProfile;
 import jdk.vm.ci.meta.JavaTypeProfile.ProfiledType;
 import jdk.vm.ci.meta.ResolvedJavaType;
 
-public class CachingStrategy implements MethodOffsetStrategy {
+public class CachingStrategy implements InvokeInterfaceStrategy {
 
     @Override
     public Optional<Evaluation> evaluate(Info info) {
@@ -38,7 +33,7 @@ public class CachingStrategy implements MethodOffsetStrategy {
             return Optional.empty();
 
         ProfiledType[] ptypes = profile.getTypes();
-        Map<Integer, List<ProfiledType>> offsets = MethodOffsetStrategy.offsetMap(info, ptypes);
+        Map<Integer, List<ProfiledType>> offsets = InvokeInterfaceStrategy.offsetMap(info, ptypes);
 
         if (offsets == null)
             return Optional.empty();

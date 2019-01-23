@@ -1,4 +1,4 @@
-package org.graalvm.compiler.hotspot.meta.invoke;
+package org.graalvm.compiler.hotspot.meta.invokeinterface;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -11,7 +11,6 @@ import java.util.stream.Stream;
 
 import org.graalvm.compiler.core.common.GraalOptions;
 import org.graalvm.compiler.hotspot.GraalHotSpotVMConfig;
-import org.graalvm.compiler.hotspot.meta.invoke.MethodOffsetStrategy.Info;
 import org.graalvm.compiler.nodes.Invoke;
 import org.graalvm.compiler.nodes.StructuredGraph;
 import org.graalvm.compiler.nodes.ValueNode;
@@ -21,11 +20,11 @@ import org.graalvm.compiler.nodes.spi.LoweringTool;
 import jdk.vm.ci.code.TargetDescription;
 import jdk.vm.ci.hotspot.HotSpotConstantReflectionProvider;
 import jdk.vm.ci.hotspot.HotSpotResolvedJavaMethod;
+import jdk.vm.ci.meta.JavaTypeProfile.ProfiledType;
 import jdk.vm.ci.meta.MetaAccessProvider;
 import jdk.vm.ci.meta.ResolvedJavaType;
-import jdk.vm.ci.meta.JavaTypeProfile.ProfiledType;
 
-public interface MethodOffsetStrategy {
+public interface InvokeInterfaceStrategy {
 
     public static Map<Integer, List<ProfiledType>> offsetMap(Info info, ProfiledType[] ptypes) {
         Map<Integer, List<ProfiledType>> offsets = new HashMap<>();
@@ -92,15 +91,13 @@ public interface MethodOffsetStrategy {
 
         String strategiesOption = GraalOptions.MethodOffsetStrategies.getValue(graph.getOptions());
 
-        List<MethodOffsetStrategy> strategies = new ArrayList<>();
+        List<InvokeInterfaceStrategy> strategies = new ArrayList<>();
 
         if (strategiesOption == null)
-            strategies = Arrays.asList(new FixedOffsetStrategy(), new SingleMethodStrategy(), new SuperclassStrategy(), new CachingStrategy(), new FallbackStrategy());
+            strategies = Arrays.asList(new SuperclassStrategy());
         else
             for (String str : strategiesOption.split(",")) {
-                if ("FixedOffset".equals(str))
-                    strategies.add(new FixedOffsetStrategy());
-                else if ("SingleMethod".equals(str))
+                if ("SingleMethod".equals(str))
                     strategies.add(new SingleMethodStrategy());
                 else if ("Superclass".equals(str))
                     strategies.add(new SuperclassStrategy());
@@ -118,12 +115,18 @@ public interface MethodOffsetStrategy {
         if (evaluations.isEmpty()) {
             return Optional.empty();
         } else {
+// System.out.println(Arrays.toString(info.callTarget.getProfile().getTypes()));
+// System.out.println(evaluations);
             Evaluation evaluation = evaluations.get(0);
 // if (!evaluation.toString().contains("Fixed") &&
 // !evaluation.toString().contains("Fallback"))
 // System.out.println("" + graph.method().getName() + ": " + invoke + " => " + evaluations);
-            Optional<ValueNode> value = evaluation.apply();
-            return value;
+// if (evaluation.toString().contains("Super")) {
+// System.out.println(Arrays.toString(info.callTarget.getProfile().getTypes()));
+// System.out.println(evaluation);
+// }
+// return evaluation.apply();
+            return Optional.empty();
         }
     }
 }
