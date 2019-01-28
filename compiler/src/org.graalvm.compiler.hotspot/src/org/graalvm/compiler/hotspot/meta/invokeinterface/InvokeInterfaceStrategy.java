@@ -94,7 +94,7 @@ public interface InvokeInterfaceStrategy {
         List<InvokeInterfaceStrategy> strategies = new ArrayList<>();
 
         if (strategiesOption == null)
-            strategies = Arrays.asList(new SuperclassStrategy());
+            strategies = Arrays.asList(new SuperclassStrategy(), new FallbackStrategy());
         else
             for (String str : strategiesOption.split(",")) {
                 if ("SingleMethod".equals(str))
@@ -125,8 +125,8 @@ public interface InvokeInterfaceStrategy {
 // System.out.println(Arrays.toString(info.callTarget.getProfile().getTypes()));
 // System.out.println(evaluation);
 // }
-// return evaluation.apply();
-            return Optional.empty();
+            return evaluation.apply();
+// return Optional.empty();
         }
     }
 }

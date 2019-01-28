@@ -21,7 +21,7 @@ public class SingleMethodStrategy implements InvokeInterfaceStrategy {
 
         boolean allSingleMethod = Arrays.stream(ptypes).allMatch(ptype -> ((HotSpotResolvedObjectType) ptype.getType()).getVtableLength() == objectVtableLength + 1);
         if (allSingleMethod)
-            System.out.println(1);
+            System.out.println(Arrays.asList(ptypes));
 
         if (allSingleMethod) {
             return Optional.of(new Evaluation() {

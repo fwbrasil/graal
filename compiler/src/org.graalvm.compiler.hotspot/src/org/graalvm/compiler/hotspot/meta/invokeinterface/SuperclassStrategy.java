@@ -37,7 +37,7 @@ public class SuperclassStrategy implements InvokeInterfaceStrategy {
 
                 @Override
                 public int effort() {
-                    return 3;
+                    return 2;
                 }
 
                 @Override

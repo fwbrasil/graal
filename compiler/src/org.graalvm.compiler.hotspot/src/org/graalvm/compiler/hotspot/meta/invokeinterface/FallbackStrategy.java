@@ -20,14 +20,14 @@ public class FallbackStrategy implements InvokeInterfaceStrategy {
                 double effort = 0D;
                 for (ProfiledType ptype : ptypes) {
                     ResolvedJavaType[] interfaces = ptype.getType().getInterfaces();
-                    int i = 0;
+                    int i = 1;
                     while (i < interfaces.length && interfaces[i] != type) {
                         i++;
                     }
                     assert interfaces[i] == type;
-                    effort += ptype.getProbability() * i * 2;
+                    effort += ptype.getProbability() * i;
                 }
-                return (int) effort + 2;
+                return (int) effort + 1;
             }
 
             @Override
